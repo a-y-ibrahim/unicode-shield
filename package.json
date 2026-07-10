@@ -37,6 +37,15 @@
     "confusables"
   ],
   "license": "MIT",
+  "author": "Abdelrahman Youssef",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/a-y-ibrahim/unicode-shield.git"
+  },
+  "bugs": {
+    "url": "https://github.com/a-y-ibrahim/unicode-shield/issues"
+  },
+  "homepage": "https://github.com/a-y-ibrahim/unicode-shield#readme",
   "overrides": {
     "esbuild": ">=0.28.1"
   },
