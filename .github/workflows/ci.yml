@@ -11,21 +11,27 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [18, 20, 22]
+        # Dev tooling (vite/vitest) needs Node >=20; the published package
+        # itself still supports Node >=18, see package.json engines.
+        node-version: [20, 22, 24]
     steps:
       - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
 
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          cache: npm
+          cache: pnpm
 
-      - run: npm install
+      - run: pnpm install
 
-      - run: npm run typecheck
+      - run: pnpm run typecheck
 
-      - run: npm run lint
+      - run: pnpm run lint
 
-      - run: npm test
+      - run: pnpm test
 
-      - run: npm run build
+      - run: pnpm run build
