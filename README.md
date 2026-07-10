@@ -28,12 +28,25 @@ name can hide characters that:
   encoded in these code points renders as nothing in every mainstream font,
   yet some LLMs still read and act on it.
 
-Existing tools in this space (like
-[`anti-trojan-source`](https://github.com/lirantal/anti-trojan-source)) scan
-*source code* for these characters, which is a different and already
-well-served problem. `unicode-shield` is built to run on *user-supplied data
-at runtime*: the string a user just typed into a username field, a chat box,
-or a file upload, before you store, render, or let someone copy it.
+## Why not an existing tool?
+
+Source-code scanners for this character class already exist and are well
+built, [`anti-trojan-source`](https://github.com/lirantal/anti-trojan-source)
+in particular. They solve a different problem: catching these characters
+*in your codebase*. `unicode-shield` is for the other side: catching them
+*in data your users type*, at the moment you're about to store or render it.
+
+Before building this, I looked for a runtime library that does that, across
+npm, PyPI, crates.io, and pkg.go.dev, plus the open-source security tooling
+major AI vendors ship. What turned up was either narrow (zero-width
+stripping only, or confusables only), a source/CI scanner applied to the
+wrong layer, or a handful of very recent projects that detect the right
+characters but strip the legitimate ones too, breaking the exact RTL text
+and emoji this library is careful not to touch. I didn't find one that
+combines bidi-control detection, Unicode Tags-block detection, and
+deliberate preservation of legitimate direction marks and script joiners.
+That combination, correctness on the safe side included, is what this is
+for.
 
 ## The other half of the problem
 
