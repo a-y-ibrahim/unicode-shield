@@ -2,6 +2,22 @@ import {describe, expect, it} from 'vitest'
 
 import {scan, isSafe} from '../scan'
 
+const LRE = String.fromCodePoint(0x202a)
+const RLE = String.fromCodePoint(0x202b)
+const PDF = String.fromCodePoint(0x202c)
+const LRO = String.fromCodePoint(0x202d)
+const RLO = String.fromCodePoint(0x202e)
+const LRI = String.fromCodePoint(0x2066)
+const RLI = String.fromCodePoint(0x2067)
+const FSI = String.fromCodePoint(0x2068)
+const PDI = String.fromCodePoint(0x2069)
+const LRM = String.fromCodePoint(0x200e)
+const RLM = String.fromCodePoint(0x200f)
+const ALM = String.fromCodePoint(0x061c)
+const ZWSP = String.fromCodePoint(0x200b)
+const BOM = String.fromCodePoint(0xfeff)
+const ZWJ = String.fromCodePoint(0x200d)
+
 describe('scan', () => {
   it('throws a clear TypeError for non-string input instead of an obscure crash', () => {
     // @ts-expect-error intentionally wrong types, this is what a JS-only
@@ -34,7 +50,7 @@ describe('scan', () => {
 
   it('flags a bidi override character as dangerous (the Trojan Source class)', () => {
     // The exact character class from CVE-2021-42574 and bluesky-social/social-app#11066.
-    const input = 'admin‮nimda'
+    const input = `admin${RLO}nimda`
     const result = scan(input)
     expect(result.safe).toBe(false)
     expect(result.threats).toHaveLength(1)
@@ -47,7 +63,7 @@ describe('scan', () => {
   })
 
   it('flags every bidi embedding and override character', () => {
-    const chars = ['‪', '‫', '‬', '‭', '‮']
+    const chars = [LRE, RLE, PDF, LRO, RLO]
     for (const char of chars) {
       const result = scan(`a${char}b`)
       expect(result.safe).toBe(false)
@@ -56,7 +72,7 @@ describe('scan', () => {
   })
 
   it('flags bidi isolates as dangerous', () => {
-    const chars = ['⁦', '⁧', '⁨', '⁩']
+    const chars = [LRI, RLI, FSI, PDI]
     for (const char of chars) {
       const result = scan(`a${char}b`)
       expect(result.safe).toBe(false)
@@ -65,14 +81,14 @@ describe('scan', () => {
   })
 
   it('flags zero-width spaces used to pad or spoof a string', () => {
-    const result = scan('admin​​​')
+    const result = scan(`admin${ZWSP}${ZWSP}${ZWSP}`)
     expect(result.safe).toBe(false)
     expect(result.threats).toHaveLength(3)
     expect(result.threats.every(t => t.category === 'invisible')).toBe(true)
   })
 
   it('flags a stray byte-order mark in the middle of a string', () => {
-    const result = scan('hello﻿world')
+    const result = scan(`hello${BOM}world`)
     expect(result.safe).toBe(false)
     expect(result.threats[0]!.category).toBe('invisible')
   })
@@ -94,7 +110,7 @@ describe('scan', () => {
     // LRM/RLM/ALM are single-character direction hints that real
     // multilingual text legitimately contains, for example around a
     // neutral punctuation mark next to Arabic or Hebrew text.
-    const result = scan('price: 100‎‏ ريال؜')
+    const result = scan(`price: 100${LRM}${RLM} ريال${ALM}`)
     expect(result.safe).toBe(true)
     const marks = result.threats.filter(t => t.category === 'bidi-mark')
     expect(marks).toHaveLength(3)
@@ -103,7 +119,7 @@ describe('scan', () => {
 
   it('does not flag ZWJ/ZWNJ as dangerous (emoji and Persian/Indic text depend on them)', () => {
     // Family emoji built from four person emoji joined with ZWJ (U+200D).
-    const familyEmoji = '\u{1F468}‍\u{1F469}‍\u{1F467}‍\u{1F466}'
+    const familyEmoji = `\u{1F468}${ZWJ}\u{1F469}${ZWJ}\u{1F467}${ZWJ}\u{1F466}`
     const result = scan(familyEmoji)
     expect(result.safe).toBe(true)
     const joiners = result.threats.filter(t => t.category === 'joiner')
@@ -112,7 +128,7 @@ describe('scan', () => {
   })
 
   it('reports correct UTF-16 indices for use with String.slice', () => {
-    const input = 'ab‮cd'
+    const input = `ab${RLO}cd`
     const result = scan(input)
     expect(result.threats[0]!.index).toBe(2)
     expect(input.slice(0, 2)).toBe('ab')
@@ -120,7 +136,7 @@ describe('scan', () => {
   })
 
   it('handles a mix of dangerous and informational characters in one string', () => {
-    const input = 'ok‎‮bad'
+    const input = `ok${LRM}${RLO}bad`
     const result = scan(input)
     expect(result.safe).toBe(false)
     expect(result.threats).toHaveLength(2)
@@ -132,7 +148,7 @@ describe('scan', () => {
 describe('isSafe', () => {
   it('mirrors scan().safe', () => {
     expect(isSafe('hello')).toBe(true)
-    expect(isSafe('a‮b')).toBe(false)
-    expect(isSafe('price‎')).toBe(true)
+    expect(isSafe(`a${RLO}b`)).toBe(false)
+    expect(isSafe(`price${LRM}`)).toBe(true)
   })
 })
