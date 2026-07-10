@@ -3,6 +3,23 @@ import {describe, expect, it} from 'vitest'
 import {scan, isSafe} from '../scan'
 
 describe('scan', () => {
+  it('throws a clear TypeError for non-string input instead of an obscure crash', () => {
+    // @ts-expect-error intentionally wrong types, this is what a JS-only
+    // (non-TypeScript) caller could pass at runtime.
+    expect(() => scan(undefined)).toThrow(TypeError)
+    // @ts-expect-error see above
+    expect(() => scan(undefined)).toThrow(/expects a string/)
+    // @ts-expect-error see above
+    expect(() => scan(null)).toThrow(TypeError)
+    // @ts-expect-error see above
+    expect(() => scan(123)).toThrow(TypeError)
+    // @ts-expect-error see above
+    expect(() => scan({})).toThrow(TypeError)
+    // @ts-expect-error arrays are iterable in JS, so this must be checked
+    // explicitly rather than relying on the for-of loop to reject it.
+    expect(() => scan([])).toThrow(TypeError)
+  })
+
   it('reports a clean ASCII string as safe with no threats', () => {
     const result = scan('hello world')
     expect(result.safe).toBe(true)

@@ -4,6 +4,13 @@ import {sanitize} from '../sanitize'
 import {scan} from '../scan'
 
 describe('sanitize', () => {
+  it('throws a clear TypeError for non-string input', () => {
+    // @ts-expect-error intentionally wrong type, mirrors a JS-only caller.
+    expect(() => sanitize(undefined)).toThrow(TypeError)
+    // @ts-expect-error see above
+    expect(() => sanitize(null)).toThrow(/expects a string/)
+  })
+
   it('returns a clean string unchanged', () => {
     expect(sanitize('hello world')).toBe('hello world')
     expect(sanitize('مرحبا بالعالم')).toBe('مرحبا بالعالم')

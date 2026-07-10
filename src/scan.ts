@@ -14,6 +14,12 @@ import {type ScanResult, type Threat} from './types'
  * never make a string unsafe.
  */
 export function scan(input: string): ScanResult {
+  if (typeof input !== 'string') {
+    throw new TypeError(
+      `unicode-shield: scan() expects a string, received ${typeof input}`,
+    )
+  }
+
   const threats: Threat[] = []
   let index = 0
 
