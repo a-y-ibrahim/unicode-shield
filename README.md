@@ -1,5 +1,8 @@
 # unicode-shield
 
+[![CI](https://github.com/a-y-ibrahim/unicode-shield/actions/workflows/ci.yml/badge.svg)](https://github.com/a-y-ibrahim/unicode-shield/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 Detect and sanitize dangerous Unicode in user-supplied text, without breaking
 real RTL text or emoji.
 
