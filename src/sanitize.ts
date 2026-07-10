@@ -1,16 +1,23 @@
 import {scan} from './scan'
 import {type SanitizeOptions, type ThreatCategory} from './types'
 
-const DANGEROUS_CATEGORIES: ThreatCategory[] = ['bidi-embedding', 'bidi-isolate', 'invisible', 'tag']
+const DANGEROUS_CATEGORIES: ThreatCategory[] = [
+  'bidi-embedding',
+  'bidi-isolate',
+  'invisible',
+  'tag',
+  'variation-selector',
+]
 
 /**
  * Strips threats found by scan() from a string. By default this strips
  * every 'dangerous' category (bidi embeddings/overrides, bidi isolates,
- * invisible characters, Unicode Tag characters), the ones with no
- * legitimate use in a short user-supplied string. 'informational'
- * threats (bidi marks, script joiners) are never stripped unless a
- * caller explicitly lists them in `options.categories`, since real RTL
- * text, Persian/Indic text, and emoji sequences depend on them.
+ * invisible characters, Unicode Tag characters, Variation Selectors
+ * Supplement characters), the ones with no legitimate use in a short
+ * user-supplied string. 'informational' threats (bidi marks, script
+ * joiners) are never stripped unless a caller explicitly lists them in
+ * `options.categories`, since real RTL text, Persian/Indic text, and
+ * emoji sequences depend on them.
  */
 export function sanitize(input: string, options: SanitizeOptions = {}): string {
   const categories = options.categories ?? DANGEROUS_CATEGORIES

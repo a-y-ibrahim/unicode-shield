@@ -27,9 +27,10 @@ name can hide characters that:
   visually identical usernames compare as different, or a blocked word slips
   past a filter.
 - **Smuggle invisible instructions** using the deprecated Unicode Tags block
-  (U+E0000-U+E007F), repurposed since 2024 as a prompt-injection vector: text
-  encoded in these code points renders as nothing in every mainstream font,
-  yet some LLMs still read and act on it.
+  (U+E0000-U+E007F) or the Variation Selectors Supplement (U+E0100-U+E01EF),
+  both repurposed since 2024 as prompt-injection vectors: text encoded in
+  these code points renders as nothing in every mainstream font, yet some
+  LLMs still read and act on it.
 
 ## Why not an existing tool?
 
@@ -120,8 +121,15 @@ Shorthand for `scan(input).safe`.
 | `bidi-isolate`    | dangerous       | LRI, RLI, FSI, PDI                     | yes |
 | `invisible`       | dangerous       | zero-width space, word joiner, stray BOM | yes |
 | `tag`             | dangerous       | U+E0000-U+E007F (deprecated Tags block) | yes |
+| `variation-selector` | dangerous    | U+E0100-U+E01EF (Variation Selectors Supplement) | yes |
 | `bidi-mark`       | informational   | LRM, RLM, ALM                          | no |
 | `joiner`          | informational   | ZWJ, ZWNJ                              | no |
+
+Note on `variation-selector`: only the Supplement block is covered. The base
+Variation Selectors block (U+FE00-U+FE0F, VS15/VS16) is never flagged, since
+that's how ordinary text picks text-style vs emoji-style presentation for
+thousands of common characters and emoji, and is extremely common in real
+user text.
 
 ## What this is not
 

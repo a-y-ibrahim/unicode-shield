@@ -3,11 +3,12 @@ import {type ScanResult, type Threat} from './types'
 
 /**
  * Scans a string for bidi embedding/override characters, bidi isolates,
- * bidi marks, script joiners, invisible characters, and Unicode Tag
- * characters. Iterates by Unicode code point (not UTF-16 code unit) so
- * supplementary-plane characters like the Tags block (U+E0000+) are
- * detected correctly instead of being read as two meaningless surrogate
- * halves.
+ * bidi marks, script joiners, invisible characters, Unicode Tag
+ * characters, and Variation Selectors Supplement characters. Iterates by
+ * Unicode code point (not UTF-16 code unit) so supplementary-plane
+ * characters like the Tags block (U+E0000+) and the Variation Selectors
+ * Supplement (U+E0100+) are detected correctly instead of being read as
+ * two meaningless surrogate halves.
  *
  * `safe` reflects only 'dangerous' threats. Legitimate bidi marks and
  * script joiners are still reported in `threats` for visibility, but they

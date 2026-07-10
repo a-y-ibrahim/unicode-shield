@@ -89,6 +89,21 @@ export const SCRIPT_JOINERS: CharDef[] = [
  */
 export const TAGS_RANGE: [number, number] = [0xe0000, 0xe007f]
 
+/**
+ * Variation Selectors Supplement (U+E0100-U+E01EF). Unicode-defined for
+ * extremely narrow CJK ideograph variant selection, essentially never seen
+ * in ordinary user-generated text. Documented since 2024 as a
+ * "variation selector smuggling" technique: stacking many of these after a
+ * base character encodes an arbitrary invisible byte payload, the same
+ * class of attack as the Tags block above, different code points. Dangerous.
+ *
+ * Deliberately does NOT cover the base Variation Selectors block
+ * (U+FE00-U+FE0F): VS15/VS16 are how ordinary text legitimately picks
+ * text-style vs emoji-style presentation (for example after U+2764 to render
+ * as an emoji heart), and are extremely common in real user text.
+ */
+export const VARIATION_SELECTORS_SUPPLEMENT_RANGE: [number, number] = [0xe0100, 0xe01ef]
+
 const SEVERITY_BY_CATEGORY: Record<ThreatCategory, Severity> = {
   'bidi-embedding': 'dangerous',
   'bidi-isolate': 'dangerous',
@@ -96,6 +111,7 @@ const SEVERITY_BY_CATEGORY: Record<ThreatCategory, Severity> = {
   joiner: 'informational',
   invisible: 'dangerous',
   tag: 'dangerous',
+  'variation-selector': 'dangerous',
 }
 
 export function severityOf(category: ThreatCategory): Severity {
@@ -109,6 +125,12 @@ export function classify(codePoint: number): ThreatCategory | null {
   if (SCRIPT_JOINERS.some(c => c.codePoint === codePoint)) return 'joiner'
   if (INVISIBLE.some(c => c.codePoint === codePoint)) return 'invisible'
   if (codePoint >= TAGS_RANGE[0] && codePoint <= TAGS_RANGE[1]) return 'tag'
+  if (
+    codePoint >= VARIATION_SELECTORS_SUPPLEMENT_RANGE[0] &&
+    codePoint <= VARIATION_SELECTORS_SUPPLEMENT_RANGE[1]
+  ) {
+    return 'variation-selector'
+  }
   return null
 }
 
@@ -118,6 +140,12 @@ export function nameFor(codePoint: number): string {
   if (found) return found.name
   if (codePoint >= TAGS_RANGE[0] && codePoint <= TAGS_RANGE[1]) {
     return `TAG (U+${codePoint.toString(16).toUpperCase()})`
+  }
+  if (
+    codePoint >= VARIATION_SELECTORS_SUPPLEMENT_RANGE[0] &&
+    codePoint <= VARIATION_SELECTORS_SUPPLEMENT_RANGE[1]
+  ) {
+    return `VARIATION SELECTOR SUPPLEMENT (U+${codePoint.toString(16).toUpperCase()})`
   }
   return `U+${codePoint.toString(16).toUpperCase()}`
 }

@@ -47,6 +47,21 @@ describe('sanitize', () => {
     expect(result).toBe('looks empty')
   })
 
+  it('strips Variation Selectors Supplement steganography payloads', () => {
+    const vs1 = String.fromCodePoint(0xe0100)
+    const vs2 = String.fromCodePoint(0xe0101)
+    const result = sanitize(`hello${vs1}${vs2}world`)
+    expect(result).toBe('helloworld')
+    expect(scan(result).safe).toBe(true)
+  })
+
+  it('never strips ordinary emoji-presentation variation selectors', () => {
+    const heart = '\u{2764}'
+    const vs16 = String.fromCodePoint(0xfe0f)
+    const input = `${heart}${vs16}`
+    expect(sanitize(input)).toBe(input)
+  })
+
   it('never strips legitimate bidi marks by default', () => {
     const input = `price: 100${LRM}${RLM} ريال${ALM}`
     expect(sanitize(input)).toBe(input)

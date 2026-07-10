@@ -106,6 +106,32 @@ describe('scan', () => {
     expect(tagThreats[0]!.codePoint).toBe(0xe0041)
   })
 
+  it('flags Variation Selectors Supplement characters used for steganography', () => {
+    // U+E0100.. is documented since 2024 as a "variation selector smuggling"
+    // technique: stacking many of these after a base character encodes an
+    // arbitrary invisible byte payload, the same class of attack as the
+    // Tags block, different code points. Also a supplementary-plane range.
+    const vs1 = String.fromCodePoint(0xe0100)
+    const vs2 = String.fromCodePoint(0xe0101)
+    const input = `hello${vs1}${vs2}world`
+    const result = scan(input)
+    expect(result.safe).toBe(false)
+    const vsThreats = result.threats.filter(t => t.category === 'variation-selector')
+    expect(vsThreats).toHaveLength(2)
+    expect(vsThreats[0]!.codePoint).toBe(0xe0100)
+  })
+
+  it('does not flag ordinary emoji-presentation variation selectors as dangerous', () => {
+    // VS16 (U+FE0F) is how "text-style vs emoji-style" is chosen for
+    // thousands of ordinary characters, for example after a heart symbol
+    // to render it as an emoji. Only the Supplement block above is flagged.
+    const heart = '\u{2764}'
+    const vs16 = String.fromCodePoint(0xfe0f)
+    const result = scan(`${heart}${vs16}`)
+    expect(result.safe).toBe(true)
+    expect(result.threats).toEqual([])
+  })
+
   it('does not flag legitimate bidi marks as dangerous', () => {
     // LRM/RLM/ALM are single-character direction hints that real
     // multilingual text legitimately contains, for example around a
