@@ -9,11 +9,11 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        # Dev tooling (vite/vitest) needs Node >=20; the published package
-        # itself still supports Node >=18, see package.json engines.
-        node-version: [20, 22, 24]
+    # pnpm 11 (the version pinned locally, matching pnpm-lock.yaml) requires
+    # Node >=22.13 to run at all, so a single, current Node version is used
+    # here rather than a matrix. The published package still declares and
+    # supports Node >=18 for consumers, see package.json engines, this only
+    # affects which Node version can run the dev toolchain (pnpm/vite/vitest).
     steps:
       - uses: actions/checkout@v4
 
@@ -23,7 +23,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: 22
           cache: pnpm
 
       - run: pnpm install
