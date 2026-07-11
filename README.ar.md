@@ -2,8 +2,7 @@
 
 [![CI](https://github.com/a-y-ibrahim/unicode-shield/actions/workflows/ci.yml/badge.svg)](https://github.com/a-y-ibrahim/unicode-shield/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-
-[Read this in English](README.md)
+[![English](https://img.shields.io/badge/English-Click-blue)](README.md)
 
 مكتبة لكشف محارف يونيكود الخطرة في النصوص التي يكتبها المستخدمون وإزالتها، دون أن تفسد نصا عربيا أو عبريا حقيقيا أو غيرهما من لغات الكتابة من اليمين إلى اليسار، ودون أن تؤثر في رموز الإيموجي.
 
