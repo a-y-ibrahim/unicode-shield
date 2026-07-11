@@ -15,7 +15,7 @@ jobs:
     # supports Node >=18 for consumers, see package.json engines, this only
     # affects which Node version can run the dev toolchain (pnpm/vite/vitest).
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: pnpm/action-setup@v6
         with:
