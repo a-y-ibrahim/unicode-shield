@@ -3,6 +3,8 @@
 [![CI](https://github.com/a-y-ibrahim/unicode-shield/actions/workflows/ci.yml/badge.svg)](https://github.com/a-y-ibrahim/unicode-shield/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
+[اقرأ هذا بالعربي](README.ar.md)
+
 Detect and sanitize dangerous Unicode in user-supplied text, without breaking
 real RTL text or emoji.
 
@@ -100,9 +102,9 @@ Returns every threat found in `input`, dangerous and informational alike.
 ### `sanitize(input: string, options?: SanitizeOptions): string`
 
 Returns `input` with dangerous characters removed. By default this strips
-`bidi-embedding`, `bidi-isolate`, `invisible`, and `tag` categories.
-Informational categories (`bidi-mark`, `joiner`) are never touched unless you
-explicitly opt in:
+`bidi-embedding`, `bidi-isolate`, `invisible`, `tag`, and `variation-selector`
+categories. Informational categories (`bidi-mark`, `joiner`) are never touched
+unless you explicitly opt in:
 
 ```ts
 sanitize(input, {categories: ['bidi-mark']})   // also strips LRM/RLM/ALM
@@ -130,6 +132,73 @@ Variation Selectors block (U+FE00-U+FE0F, VS15/VS16) is never flagged, since
 that's how ordinary text picks text-style vs emoji-style presentation for
 thousands of common characters and emoji, and is extremely common in real
 user text.
+
+## ESLint plugin
+
+`scan`/`sanitize` only help if something actually calls them. The other way
+this class of bug ships is a data path that never runs through either one:
+`unicode-shield/eslint-plugin` catches that at review time instead of in
+production, by checking whether identity-like text (a username, a handle, a
+display name, a bio) reaches JSX unsanitized. This is a code-structure check
+of the kind described in "Why not an existing tool?" above as source/CI
+scanning, not the runtime text scanning `scan()` does, and unlike a general
+source scanner it's specifically about whether *this library's* `sanitize()`
+sits in the path before a risky-looking value renders.
+
+```js
+// eslint.config.js
+import unicodeShield from 'unicode-shield/eslint-plugin'
+
+export default [
+  {
+    plugins: {'unicode-shield': unicodeShield},
+    rules: {'unicode-shield/require-sanitized-text': 'warn'},
+  },
+]
+```
+
+```jsx
+<Text>{user.displayName}</Text>            // flagged
+
+<Text>{sanitize(user.displayName)}</Text>  // fine
+
+const safeName = sanitize(user.displayName)
+<Text>{safeName}</Text>                    // fine, traced back to the sanitize() call
+```
+
+### `require-sanitized-text`
+
+Flags a JSX child expression when it's a bare identifier or a property access
+with a statically known name, dot or bracket notation alike (`{username}`,
+`{user.bio}`, `{user["bio"]}`), whose name matches a configured list of
+identity-like names, unless it's wrapped in `sanitize(...)` right there, or
+traced back exactly one declaration to a local variable assigned from a
+`sanitize(...)` call.
+
+| Option | Default | |
+| --- | --- | --- |
+| `riskyNames` | `['username', 'handle', 'displayname', 'nickname', 'bio']` | Case-insensitive substring match against the identifier or property name. Replaces the default list rather than extending it. |
+| `sanitizerNames` | `['sanitize']` | Function names, bare or as a property (e.g. `unicodeShield.sanitize`), recognized as sanitizing their argument. |
+
+**What this rule deliberately doesn't do**, v1 scope rather than an
+oversight:
+
+- Checks only JSX *children* (`<Text>{x}</Text>`), not attributes
+  (`alt={x}`, `title={x}`). Attribute sinks are a known gap.
+- Understands only a bare identifier or one property access (a computed key
+  like `user[someVariable]` can't be resolved statically and is skipped),
+  and traces a variable back exactly one declaration. It's a naming
+  heuristic, not real data-flow analysis: `{formatHandle(handle)}` isn't
+  inspected, and reassignment (`let x = a; x = b`) isn't followed.
+- Matches names by case-insensitive substring, so a name like
+  `usernamePattern` can false-positive. Rename the variable, adjust
+  `riskyNames`, or disable the line.
+- Only recognizes a `sanitize()` call (or a name added to `sanitizerNames`)
+  as proof of safety, not an `isSafe()` guard.
+
+Requires `eslint >= 9`, declared as an optional peer dependency: the core
+`scan`/`sanitize`/`isSafe` API has no dependency on ESLint at all, only this
+subpath does.
 
 ## What this is not
 

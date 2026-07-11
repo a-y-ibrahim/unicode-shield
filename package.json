@@ -11,10 +11,16 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./eslint-plugin": {
+      "types": "./dist/eslint-plugin.d.ts",
+      "import": "./dist/eslint-plugin.js",
+      "require": "./dist/eslint-plugin.cjs"
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.ar.md"
   ],
   "sideEffects": false,
   "scripts": {
@@ -34,7 +40,9 @@
     "rtl",
     "prompt-injection",
     "spoofing",
-    "confusables"
+    "confusables",
+    "eslint-plugin",
+    "eslint-rule"
   ],
   "license": "MIT",
   "author": "Abdelrahman Youssef",
@@ -48,6 +56,14 @@
   "homepage": "https://github.com/a-y-ibrahim/unicode-shield#readme",
   "overrides": {
     "esbuild": ">=0.28.1"
+  },
+  "peerDependencies": {
+    "eslint": ">=9"
+  },
+  "peerDependenciesMeta": {
+    "eslint": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^8.0.0",

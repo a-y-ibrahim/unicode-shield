@@ -1,7 +1,10 @@
 import {defineConfig} from 'tsup'
 
 export default defineConfig({
-  entry: ['src/index.ts'],
+  entry: {
+    index: 'src/index.ts',
+    'eslint-plugin': 'src/eslint-plugin/index.ts',
+  },
   format: ['esm', 'cjs'],
   dts: true,
   sourcemap: true,
