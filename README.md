@@ -265,4 +265,5 @@ deliberately don't try to be.
 
 ## License
 
-MIT
+MIT. The generated Unicode data behind `unicode-shield/confusables` is
+covered by its own license instead, see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

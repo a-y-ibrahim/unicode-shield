@@ -171,4 +171,4 @@ detectMixedScript('аpple')
 
 ## الرخصة
 
-MIT
+MIT. أما بيانات يونيكود المولدة التي يعتمد عليها `unicode-shield/confusables` فتخضع لرخصة خاصة بها، التفاصيل في [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

@@ -72,6 +72,7 @@ async function generateConfusables() {
  * Unicode version: ${version}
  * Data date: ${date}
  * Entries: ${entries.length}
+ * License: Unicode-3.0, see ../../THIRD_PARTY_NOTICES.md
  */
 
 /**
@@ -154,6 +155,7 @@ async function generateScripts() {
  * Unicode version: ${version}
  * Data date: ${date}
  * Ranges: ${ranges.length}, scripts: ${scriptNames.length}
+ * License: Unicode-3.0, see ../../THIRD_PARTY_NOTICES.md
  */
 
 export const SCRIPT_NAMES: readonly string[] = [

@@ -25,7 +25,8 @@
   },
   "files": [
     "dist",
-    "README.ar.md"
+    "README.ar.md",
+    "THIRD_PARTY_NOTICES.md"
   ],
   "sideEffects": false,
   "scripts": {

@@ -7,6 +7,7 @@
  * Unicode version: 17.0.0
  * Data date: 2025-07-24, 13:28:55 GMT
  * Ranges: 2287, scripts: 174
+ * License: Unicode-3.0, see ../../THIRD_PARTY_NOTICES.md
  */
 
 export const SCRIPT_NAMES: readonly string[] = [

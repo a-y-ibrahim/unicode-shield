@@ -7,6 +7,7 @@
  * Unicode version: 17.0.0
  * Data date: 2025-07-22, 05:49:37 GMT
  * Entries: 6565
+ * License: Unicode-3.0, see ../../THIRD_PARTY_NOTICES.md
  */
 
 /**
