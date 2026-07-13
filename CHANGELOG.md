@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.1] - 2026-07-13
+
+### Fixed
+
+- This file (`CHANGELOG.md`) is now actually included in the published
+  package. It was added to the repository right after 0.2.0 shipped, so
+  that tarball didn't contain it yet.
+
 ## [0.2.0] - 2026-07-13
 
 ### Added
@@ -38,4 +46,5 @@ this project adheres to [Semantic Versioning](https://semver.org/).
   Unicode Tags block (U+E0000-U+E007F), and the Variation Selectors
   Supplement (U+E0100-U+E01EF).
 
+[0.2.1]: https://github.com/a-y-ibrahim/unicode-shield/releases/tag/v0.2.1
 [0.2.0]: https://github.com/a-y-ibrahim/unicode-shield/releases/tag/v0.2.0
