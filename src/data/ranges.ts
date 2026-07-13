@@ -57,6 +57,10 @@ export const BIDI_MARKS: CharDef[] = [
 export const INVISIBLE: CharDef[] = [
   {codePoint: 0x200b, name: 'ZERO WIDTH SPACE'},
   {codePoint: 0x2060, name: 'WORD JOINER'},
+  {codePoint: 0x2061, name: 'FUNCTION APPLICATION'},
+  {codePoint: 0x2062, name: 'INVISIBLE TIMES'},
+  {codePoint: 0x2063, name: 'INVISIBLE SEPARATOR'},
+  {codePoint: 0x2064, name: 'INVISIBLE PLUS'},
   {codePoint: 0xfeff, name: 'ZERO WIDTH NO-BREAK SPACE (BOM)'},
   {codePoint: 0x180e, name: 'MONGOLIAN VOWEL SEPARATOR'},
   {codePoint: 0x00ad, name: 'SOFT HYPHEN'},

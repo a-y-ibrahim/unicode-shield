@@ -17,6 +17,7 @@ const ALM = String.fromCodePoint(0x061c)
 const ZWSP = String.fromCodePoint(0x200b)
 const BOM = String.fromCodePoint(0xfeff)
 const ZWJ = String.fromCodePoint(0x200d)
+const INVISIBLE_TIMES = String.fromCodePoint(0x2062)
 
 describe('scan', () => {
   it('throws a clear TypeError for non-string input instead of an obscure crash', () => {
@@ -84,6 +85,17 @@ describe('scan', () => {
     const result = scan(`admin${ZWSP}${ZWSP}${ZWSP}`)
     expect(result.safe).toBe(false)
     expect(result.threats).toHaveLength(3)
+    expect(result.threats.every(t => t.category === 'invisible')).toBe(true)
+  })
+
+  it('flags invisible math-operator characters from the same block as WORD JOINER', () => {
+    // U+2061-U+2064 (FUNCTION APPLICATION, INVISIBLE TIMES, INVISIBLE
+    // SEPARATOR, INVISIBLE PLUS) are zero-width Format(Cf) characters right
+    // next to WORD JOINER (U+2060) in General Punctuation, usable for the
+    // same identity-padding trick as ZWSP.
+    const result = scan(`admin${INVISIBLE_TIMES}${INVISIBLE_TIMES}`)
+    expect(result.safe).toBe(false)
+    expect(result.threats).toHaveLength(2)
     expect(result.threats.every(t => t.category === 'invisible')).toBe(true)
   })
 

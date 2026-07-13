@@ -10,6 +10,7 @@ const ALM = String.fromCodePoint(0x061c)
 const ZWSP = String.fromCodePoint(0x200b)
 const BOM = String.fromCodePoint(0xfeff)
 const ZWJ = String.fromCodePoint(0x200d)
+const INVISIBLE_TIMES = String.fromCodePoint(0x2062)
 
 describe('sanitize', () => {
   it('throws a clear TypeError for non-string input', () => {
@@ -36,6 +37,10 @@ describe('sanitize', () => {
 
   it('strips zero-width padding characters', () => {
     expect(sanitize(`admin${ZWSP}${ZWSP}${ZWSP}`)).toBe('admin')
+  })
+
+  it('strips invisible math-operator padding characters', () => {
+    expect(sanitize(`admin${INVISIBLE_TIMES}${INVISIBLE_TIMES}`)).toBe('admin')
   })
 
   it('strips a stray byte-order mark', () => {
