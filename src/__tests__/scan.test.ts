@@ -268,4 +268,22 @@ describe('combining marks (Zalgo text)', () => {
     const result = scan(input)
     expect(result.threats.filter(t => t.category === 'combining-marks')).toHaveLength(0)
   })
+
+  it('flags a run of orphan combining marks with no preceding base character', () => {
+    const result = scan(ACUTE.repeat(8))
+    expect(result.safe).toBe(false)
+    expect(result.threats.filter(t => t.category === 'combining-marks')).toHaveLength(2)
+  })
+
+  it('flags a supplementary-plane (surrogate pair) combining mark correctly, not as garbled surrogate halves', () => {
+    // U+101FD PHAISTOS DISC SIGN COMBINING OBLIQUE STROKE, a real Mn
+    // character above the BMP. Confirms code-point iteration (not UTF-16
+    // code units) applies to this category too, same as the bidi/tag tests.
+    const suppMark = String.fromCodePoint(0x101fd)
+    const result = scan(`e${suppMark.repeat(9)}`)
+    expect(result.safe).toBe(false)
+    const flagged = result.threats.filter(t => t.category === 'combining-marks')
+    expect(flagged).toHaveLength(3)
+    expect(flagged[0]!.codePoint).toBe(0x101fd)
+  })
 })

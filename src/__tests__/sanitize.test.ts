@@ -107,6 +107,13 @@ describe('sanitize', () => {
     expect(scan(result).safe).toBe(true)
   })
 
+  it('substitutes a custom replacement for each excess combining mark individually', () => {
+    const acute = String.fromCodePoint(0x0301)
+    const result = sanitize(`e${acute.repeat(9)}`, {replacement: '#'})
+    // 1 base + 6 kept marks + 3 replacement characters for the 3 excess marks.
+    expect(result).toBe(`e${acute.repeat(6)}###`)
+  })
+
   it('never strips a reasonable number of combining marks on real text', () => {
     // Arabic tashkeel marks built from code points rather than typed as
     // literal diacritics in source, see the same pattern in scan.test.ts.
