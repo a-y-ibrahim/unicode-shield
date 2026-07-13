@@ -20,9 +20,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # No "version" input here on purpose: pnpm/action-setup reads the
+      # exact pinned version from package.json's "packageManager" field.
+      # A loose range like "11" lets the action self-update to whatever the
+      # latest 11.x patch is, which has broken CI before (pnpm 11.12.0
+      # crashed installing from this lockfile).
       - uses: pnpm/action-setup@v6
-        with:
-          version: 11
 
       - uses: actions/setup-node@v6
         with:
