@@ -263,6 +263,10 @@ mixed-script detection above cover a specific, well-defined class of visual
 spoofing; they are not a general "is this text suspicious" classifier, and
 deliberately don't try to be.
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for release history.
+
 ## License
 
 MIT. The generated Unicode data behind `unicode-shield/confusables` is
