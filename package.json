@@ -16,6 +16,11 @@
       "types": "./dist/eslint-plugin.d.ts",
       "import": "./dist/eslint-plugin.js",
       "require": "./dist/eslint-plugin.cjs"
+    },
+    "./confusables": {
+      "types": "./dist/confusables.d.ts",
+      "import": "./dist/confusables.js",
+      "require": "./dist/confusables.cjs"
     }
   },
   "files": [
@@ -41,6 +46,7 @@
     "prompt-injection",
     "spoofing",
     "confusables",
+    "homoglyphs",
     "eslint-plugin",
     "eslint-rule"
   ],

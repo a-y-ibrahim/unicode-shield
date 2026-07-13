@@ -199,13 +199,69 @@ Requires `eslint >= 9`, declared as an optional peer dependency: the core
 `scan`/`sanitize`/`isSafe` API has no dependency on ESLint at all, only this
 subpath does.
 
+## Confusables (homoglyph detection)
+
+`scan`/`sanitize` cover characters that hide or reorder text. They don't
+cover the other half of Unicode spoofing: characters that are simply drawn
+to look like a different character, the class of bug behind lookalike
+domains and usernames (an "apple" spelled with a Cyrillic а instead of a
+Latin a). That's a separate, opt-in subpath, `unicode-shield/confusables`,
+built on Unicode's own security data (UTS #39) rather than a hand-picked
+list:
+
+```ts
+import {getSkeleton, areConfusable, detectMixedScript} from 'unicode-shield/confusables'
+
+areConfusable('apple', 'аpple')   // true: the second "a" is Cyrillic
+areConfusable('apple', 'orange')       // false
+
+detectMixedScript('аpple')
+// { mixed: true, scripts: ['Cyrillic', 'Latin'], suspicious: [{ char: 'а', codePoint: 0x430, index: 0, script: 'Cyrillic' }] }
+```
+
+### `getSkeleton(input: string): string`
+
+The UTS #39 "skeleton" of a string: Unicode-normalize, replace every
+character that has a documented confusable prototype with that prototype,
+normalize again. Two strings are visually confusable exactly when their
+skeletons match.
+
+### `areConfusable(a: string, b: string): boolean`
+
+Shorthand for `getSkeleton(a) === getSkeleton(b)`. The practical use case:
+checking whether a newly chosen username or display name is visually
+indistinguishable from one that already exists, the exact class of bug this
+library's origin story is about.
+
+### `detectMixedScript(input: string): MixedScriptResult`
+
+Flags a string that mixes two or more scripts outside of Common and
+Inherited (digits, punctuation, and combining marks are shared by every
+script and never count as mixing on their own), the pattern behind
+lookalike-domain spoofing. Reports the majority script plus which specific
+characters don't belong to it. This is a practical heuristic, not an
+implementation of UTS #39's full restriction-level algorithm.
+
+**A real example of why "looks foreign" isn't the test.** Unicode's own
+data lists Arabic ا (ALEF) as confusable with Latin `l`, both being a
+single vertical stroke. `getSkeleton`/`areConfusable` will correctly say
+so; `detectMixedScript('مرحبا')` will just as correctly say `mixed: false`,
+because every character in that word is Arabic. Confusability and script
+membership are independent questions, and mixing them up is exactly how a
+detector ends up flagging ordinary RTL text.
+
+**Why a separate subpath.** Unicode's confusables and script data cover
+thousands of mappings; the generated data this ships is around 190&nbsp;KB.
+Keeping it out of the core `unicode-shield` import means `scan`/`sanitize`
+callers who don't need homoglyph detection pay nothing for it: `dist/index.js`
+is unaffected by this feature's size.
+
 ## What this is not
 
-This is not a source-code scanner, a profanity filter, or a homoglyph
-(lookalike-character) detector. It is scoped to the bidi and invisible
-character classes above. Confusable/homoglyph detection is real, valuable,
-and a large enough problem (thousands of Unicode-defined mappings) that it
-belongs in its own release rather than a half-implemented add-on here.
+This is not a source-code scanner or a profanity filter. Confusable and
+mixed-script detection above cover a specific, well-defined class of visual
+spoofing; they are not a general "is this text suspicious" classifier, and
+deliberately don't try to be.
 
 ## License
 

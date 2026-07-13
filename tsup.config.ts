@@ -4,6 +4,7 @@ export default defineConfig({
   entry: {
     index: 'src/index.ts',
     'eslint-plugin': 'src/eslint-plugin/index.ts',
+    confusables: 'src/confusables/index.ts',
   },
   format: ['esm', 'cjs'],
   dts: true,
