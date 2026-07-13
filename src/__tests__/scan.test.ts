@@ -190,3 +190,82 @@ describe('isSafe', () => {
     expect(isSafe(`price${LRM}`)).toBe(true)
   })
 })
+
+describe('combining marks (Zalgo text)', () => {
+  const ACUTE = String.fromCodePoint(0x0301) // COMBINING ACUTE ACCENT, General_Category Mn
+  const VS_SUPPLEMENT = String.fromCodePoint(0xe0100)
+  // Arabic tashkeel marks, built from code points rather than typed as
+  // literal diacritics in source (project convention for hard-to-review
+  // Unicode content, see the existing bidi/invisible test constants above).
+  const FATHA = String.fromCodePoint(0x064e)
+  const SHADDA = String.fromCodePoint(0x0651)
+  const SUKUN = String.fromCodePoint(0x0652)
+  const DAGGER_ALIF = String.fromCodePoint(0x0670)
+  const KASRA = String.fromCodePoint(0x0650)
+  // "ar-Rahman" fully voweled: alif-lam-ra + shadda+fatha, ha + sukun,
+  // mim + fatha+dagger-alif, nun + kasra.
+  const denselyVoweledArabic = `الر${SHADDA}${FATHA}ح${SUKUN}م${FATHA}${DAGGER_ALIF}ن${KASRA}`
+
+  it('allows up to the threshold of stacked marks on one base character', () => {
+    const result = scan(`e${ACUTE.repeat(6)}`)
+    expect(result.safe).toBe(true)
+    expect(result.threats.filter(t => t.category === 'combining-marks')).toHaveLength(0)
+  })
+
+  it('flags marks past the threshold, one threat per excess mark', () => {
+    const result = scan(`e${ACUTE.repeat(7)}`)
+    expect(result.safe).toBe(false)
+    const flagged = result.threats.filter(t => t.category === 'combining-marks')
+    expect(flagged).toHaveLength(1)
+    expect(flagged[0]).toMatchObject({severity: 'dangerous', codePoint: 0x301})
+  })
+
+  it('flags a Zalgo-style pile of marks proportional to how far over the threshold it is', () => {
+    const result = scan(`e${ACUTE.repeat(20)}`)
+    expect(result.safe).toBe(false)
+    expect(result.threats.filter(t => t.category === 'combining-marks')).toHaveLength(14)
+  })
+
+  it('resets the count per base character, not for the whole string', () => {
+    // Two separate letters each with 6 marks (at the limit): neither run
+    // individually exceeds the threshold, so nothing is flagged, even
+    // though the string has 12 combining marks in total.
+    const result = scan(`e${ACUTE.repeat(6)}o${ACUTE.repeat(6)}`)
+    expect(result.safe).toBe(true)
+  })
+
+  it('does not flag real, densely voweled Arabic text', () => {
+    // The densest realistic Quranic-annotation style Arabic gets: at most
+    // 2-3 combining marks per letter, nowhere near the threshold of 6.
+    const result = scan(denselyVoweledArabic)
+    expect(result.safe).toBe(true)
+    expect(result.threats.filter(t => t.category === 'combining-marks')).toHaveLength(0)
+  })
+
+  it('does not flag real Hebrew text with niqqud', () => {
+    const result = scan('שָׁלוֹם') // "shalom" with vowel points
+    expect(result.safe).toBe(true)
+    expect(result.threats.filter(t => t.category === 'combining-marks')).toHaveLength(0)
+  })
+
+  it('does not flag real Vietnamese text decomposed into base letter plus combining diacritics', () => {
+    const result = scan('Tiếng Việt'.normalize('NFD'))
+    expect(result.safe).toBe(true)
+    expect(result.threats.filter(t => t.category === 'combining-marks')).toHaveLength(0)
+  })
+
+  it('does not double-count Variation Selectors Supplement characters, they are Mn too but already have their own category', () => {
+    const result = scan(`e${VS_SUPPLEMENT.repeat(10)}`)
+    expect(result.threats.every(t => t.category === 'variation-selector')).toBe(true)
+    expect(result.threats.filter(t => t.category === 'combining-marks')).toHaveLength(0)
+  })
+
+  it('does not merge two separate combining-mark runs across an unrelated classified character', () => {
+    // 3 marks, then 5 variation selectors (a different, already-handled
+    // category), then 3 more marks: two runs of 3 each, neither exceeds
+    // the threshold of 6 on its own.
+    const input = `e${ACUTE.repeat(3)}${VS_SUPPLEMENT.repeat(5)}${ACUTE.repeat(3)}`
+    const result = scan(input)
+    expect(result.threats.filter(t => t.category === 'combining-marks')).toHaveLength(0)
+  })
+})

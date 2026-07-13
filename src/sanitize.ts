@@ -7,13 +7,15 @@ const DANGEROUS_CATEGORIES: ThreatCategory[] = [
   'invisible',
   'tag',
   'variation-selector',
+  'combining-marks',
 ]
 
 /**
  * Strips threats found by scan() from a string. By default this strips
  * every 'dangerous' category (bidi embeddings/overrides, bidi isolates,
  * invisible characters, Unicode Tag characters, Variation Selectors
- * Supplement characters), the ones with no legitimate use in a short
+ * Supplement characters, combining marks stacked past
+ * MAX_COMBINING_MARKS_PER_BASE), the ones with no legitimate use in a short
  * user-supplied string. 'informational' threats (bidi marks, script
  * joiners) are never stripped unless a caller explicitly lists them in
  * `options.categories`, since real RTL text, Persian/Indic text, and

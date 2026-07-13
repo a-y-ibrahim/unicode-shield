@@ -6,6 +6,7 @@ export type ThreatCategory =
   | 'invisible'
   | 'tag'
   | 'variation-selector'
+  | 'combining-marks'
 
 /**
  * 'dangerous' categories have no legitimate use in a short user-supplied

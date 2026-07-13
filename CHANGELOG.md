@@ -4,6 +4,19 @@ All notable changes to this project are documented in this file. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-07-13
+
+### Added
+
+- Combining-mark stacking ("Zalgo text") detection: `scan()`/`sanitize()`
+  gain a new `combining-marks` category that flags more than 6 Unicode
+  Nonspacing_Mark (Mn) characters stacked on a single base character, the
+  technique behind visual harassment and chat/username corruption.
+  `sanitize()` caps a run at 6 marks instead of stripping all of them.
+  Verified against dense real-world diacritic use (fully-voweled Arabic,
+  Hebrew niqqud and cantillation, Vietnamese) to stay well clear of the
+  threshold.
+
 ## [0.2.1] - 2026-07-13
 
 ### Fixed
@@ -46,5 +59,6 @@ this project adheres to [Semantic Versioning](https://semver.org/).
   Unicode Tags block (U+E0000-U+E007F), and the Variation Selectors
   Supplement (U+E0100-U+E01EF).
 
+[0.3.0]: https://github.com/a-y-ibrahim/unicode-shield/releases/tag/v0.3.0
 [0.2.1]: https://github.com/a-y-ibrahim/unicode-shield/releases/tag/v0.2.1
 [0.2.0]: https://github.com/a-y-ibrahim/unicode-shield/releases/tag/v0.2.0

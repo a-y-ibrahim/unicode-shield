@@ -101,9 +101,9 @@ Returns every threat found in `input`, dangerous and informational alike.
 ### `sanitize(input: string, options?: SanitizeOptions): string`
 
 Returns `input` with dangerous characters removed. By default this strips
-`bidi-embedding`, `bidi-isolate`, `invisible`, `tag`, and `variation-selector`
-categories. Informational categories (`bidi-mark`, `joiner`) are never touched
-unless you explicitly opt in:
+`bidi-embedding`, `bidi-isolate`, `invisible`, `tag`, `variation-selector`,
+and `combining-marks` categories. Informational categories (`bidi-mark`,
+`joiner`) are never touched unless you explicitly opt in:
 
 ```ts
 sanitize(input, {categories: ['bidi-mark']})   // also strips LRM/RLM/ALM
@@ -123,6 +123,7 @@ Shorthand for `scan(input).safe`.
 | `invisible`       | dangerous       | zero-width space, word joiner, stray BOM | yes |
 | `tag`             | dangerous       | U+E0000-U+E007F (deprecated Tags block) | yes |
 | `variation-selector` | dangerous    | U+E0100-U+E01EF (Variation Selectors Supplement) | yes |
+| `combining-marks` | dangerous       | stacked accents past a safe count ("Zalgo text") | yes |
 | `bidi-mark`       | informational   | LRM, RLM, ALM                          | no |
 | `joiner`          | informational   | ZWJ, ZWNJ                              | no |
 
@@ -131,6 +132,17 @@ Variation Selectors block (U+FE00-U+FE0F, VS15/VS16) is never flagged, since
 that's how ordinary text picks text-style vs emoji-style presentation for
 thousands of common characters and emoji, and is extremely common in real
 user text.
+
+Note on `combining-marks`: every Unicode code point with General_Category
+`Mn` (Nonspacing_Mark) counts as a combining mark, generated from Unicode's
+own data rather than a hand-picked list. What makes one dangerous isn't the
+character itself, real text in dozens of scripts depends on combining
+marks, it's stacking more than 6 of them on a single base character, the
+technique behind "Zalgo text" abuse (visual harassment, chat/username
+corruption). Fully-voweled Arabic, Hebrew with niqqud and cantillation, and
+similarly diacritic-heavy real text stay well under that count; `sanitize()`
+caps a run at 6 marks instead of stripping all of them, so the base
+character keeps a reasonable, real-looking amount of decoration.
 
 ## ESLint plugin
 

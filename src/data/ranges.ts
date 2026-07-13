@@ -1,4 +1,5 @@
 import {type Severity, type ThreatCategory} from '../types'
+import {NONSPACING_MARK_RANGES} from './combining-marks-data'
 
 interface CharDef {
   codePoint: number
@@ -108,6 +109,40 @@ export const TAGS_RANGE: [number, number] = [0xe0000, 0xe007f]
  */
 export const VARIATION_SELECTORS_SUPPLEMENT_RANGE: [number, number] = [0xe0100, 0xe01ef]
 
+/**
+ * How many Unicode Nonspacing_Mark (Mn) characters are allowed to stack on
+ * one base character before scan() calls it abuse rather than legitimate
+ * text. Real diacritic-heavy text (fully-voweled Arabic or Quranic
+ * annotation, Hebrew niqqud plus cantillation, Vietnamese) realistically
+ * never exceeds 3-4 marks on a single base character; this leaves a wide
+ * safety margin. "Zalgo text" abuse relies on stacking dozens to hundreds
+ * of marks specifically for the corrupted visual effect, so it clears this
+ * bar trivially. See isNonspacingMark() below for what counts as a mark.
+ */
+export const MAX_COMBINING_MARKS_PER_BASE = 6
+
+/**
+ * True for any code point with Unicode General_Category=Mn (Nonspacing_Mark),
+ * generated from Unicode's own data (see combining-marks-data.ts). This
+ * includes ordinary combining diacritics from dozens of scripts, and also
+ * both variation selector blocks (they carry Mn too); classify() already
+ * gives variation selectors their own dedicated category, so callers that
+ * want the Zalgo-stacking heuristic specifically should skip code points
+ * classify() already recognizes, see scan()'s use of this function.
+ */
+export function isNonspacingMark(codePoint: number): boolean {
+  let lo = 0
+  let hi = NONSPACING_MARK_RANGES.length - 1
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1
+    const range = NONSPACING_MARK_RANGES[mid]!
+    if (codePoint < range[0]) hi = mid - 1
+    else if (codePoint > range[1]) lo = mid + 1
+    else return true
+  }
+  return false
+}
+
 const SEVERITY_BY_CATEGORY: Record<ThreatCategory, Severity> = {
   'bidi-embedding': 'dangerous',
   'bidi-isolate': 'dangerous',
@@ -116,6 +151,7 @@ const SEVERITY_BY_CATEGORY: Record<ThreatCategory, Severity> = {
   invisible: 'dangerous',
   tag: 'dangerous',
   'variation-selector': 'dangerous',
+  'combining-marks': 'dangerous',
 }
 
 export function severityOf(category: ThreatCategory): Severity {
@@ -150,6 +186,9 @@ export function nameFor(codePoint: number): string {
     codePoint <= VARIATION_SELECTORS_SUPPLEMENT_RANGE[1]
   ) {
     return `VARIATION SELECTOR SUPPLEMENT (U+${codePoint.toString(16).toUpperCase()})`
+  }
+  if (isNonspacingMark(codePoint)) {
+    return `COMBINING MARK (U+${codePoint.toString(16).toUpperCase()})`
   }
   return `U+${codePoint.toString(16).toUpperCase()}`
 }

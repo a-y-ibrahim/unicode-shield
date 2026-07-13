@@ -1,14 +1,16 @@
-// Regenerates src/data/confusables-data.ts and src/data/scripts-data.ts from
-// Unicode's official UTS #39 security data. Not part of the normal build:
-// run it by hand when picking up a new Unicode version.
+// Regenerates src/data/confusables-data.ts, src/data/scripts-data.ts, and
+// src/data/combining-marks-data.ts from Unicode's official data files. Not
+// part of the normal build: run it by hand when picking up a new Unicode
+// version.
 //
-//   node scripts/generate-confusables-data.mjs
+//   node scripts/generate-unicode-data.mjs
 
 import {writeFileSync} from 'node:fs'
 import {fileURLToPath} from 'node:url'
 
 const CONFUSABLES_URL = 'https://www.unicode.org/Public/security/latest/confusables.txt'
 const SCRIPTS_URL = 'https://www.unicode.org/Public/UCD/latest/ucd/Scripts.txt'
+const GENERAL_CATEGORY_URL = 'https://www.unicode.org/Public/UCD/latest/ucd/extracted/DerivedGeneralCategory.txt'
 
 const dataDir = fileURLToPath(new URL('../src/data', import.meta.url))
 
@@ -66,7 +68,7 @@ async function generateConfusables() {
   const output = `/**
  * Generated from Unicode's official confusables.txt (UTS #39 security
  * data), do not edit by hand. Regenerate with:
- *   node scripts/generate-confusables-data.mjs
+ *   node scripts/generate-unicode-data.mjs
  *
  * Source: ${CONFUSABLES_URL}
  * Unicode version: ${version}
@@ -149,7 +151,7 @@ async function generateScripts() {
   const output = `/**
  * Generated from Unicode's official Scripts.txt, do not edit by hand.
  * Regenerate with:
- *   node scripts/generate-confusables-data.mjs
+ *   node scripts/generate-unicode-data.mjs
  *
  * Source: ${SCRIPTS_URL}
  * Unicode version: ${version}
@@ -175,5 +177,91 @@ ${rangesBody}
   console.log(`Wrote scripts-data.ts: ${ranges.length} ranges, ${scriptNames.length} scripts`)
 }
 
+async function generateCombiningMarks() {
+  console.log(`Fetching ${GENERAL_CATEGORY_URL} ...`)
+  const res = await fetch(GENERAL_CATEGORY_URL)
+  if (!res.ok) throw new Error(`Failed to fetch DerivedGeneralCategory.txt: ${res.status} ${res.statusText}`)
+  const text = await res.text()
+  const {date, version} = parseHeader(text)
+
+  const ranges = []
+  for (const line of text.split('\n')) {
+    if (!line || line.startsWith('#')) continue
+    const parts = line.split(';')
+    if (parts.length < 2) continue
+    const categoryMatch = parts[1].match(/^\s*(\w+)/)
+    // Mn = Nonspacing_Mark: combining marks that stack on a base character
+    // without taking up their own space, the mechanism "Zalgo text" abuse
+    // relies on. Mc (spacing) and Me (enclosing) are deliberately excluded,
+    // they don't produce the same unbounded visual stacking.
+    if (!categoryMatch || categoryMatch[1] !== 'Mn') continue
+
+    const rangePart = parts[0].trim()
+    let start
+    let end
+    if (rangePart.includes('..')) {
+      const [s, e] = rangePart.split('..')
+      start = parseInt(s, 16)
+      end = parseInt(e, 16)
+    } else {
+      start = parseInt(rangePart, 16)
+      end = start
+    }
+    if (Number.isNaN(start) || Number.isNaN(end)) {
+      throw new Error(`Unparseable DerivedGeneralCategory.txt line: ${line}`)
+    }
+    ranges.push([start, end])
+  }
+  ranges.sort((a, b) => a[0] - b[0])
+
+  // DerivedGeneralCategory.txt already lists maximal ranges per category,
+  // but merge defensively in case that ever changes.
+  const merged = []
+  for (const [start, end] of ranges) {
+    const last = merged[merged.length - 1]
+    if (last && start <= last[1] + 1) {
+      last[1] = Math.max(last[1], end)
+    } else {
+      merged.push([start, end])
+    }
+  }
+
+  // Sanity check: merged ranges must not overlap, the lookup below assumes that.
+  for (let i = 1; i < merged.length; i++) {
+    if (merged[i][0] <= merged[i - 1][1]) {
+      throw new Error(`Overlapping merged Mn ranges: ${JSON.stringify(merged[i - 1])} and ${JSON.stringify(merged[i])}`)
+    }
+  }
+
+  const totalCodePoints = merged.reduce((sum, [s, e]) => sum + (e - s + 1), 0)
+  const body = merged.map(([s, e]) => `  [${toHex(s)}, ${toHex(e)}],`).join('\n')
+
+  const output = `/**
+ * Generated from Unicode's official DerivedGeneralCategory.txt, do not
+ * edit by hand. Regenerate with:
+ *   node scripts/generate-unicode-data.mjs
+ *
+ * Source: ${GENERAL_CATEGORY_URL}
+ * Unicode version: ${version}
+ * Data date: ${date}
+ * Ranges: ${merged.length}, code points: ${totalCodePoints}
+ * Category: Mn (Nonspacing_Mark)
+ * License: Unicode-3.0, see ../../THIRD_PARTY_NOTICES.md
+ */
+
+/**
+ * Sorted by start code point and non-overlapping, so a lookup can binary
+ * search on start. Each entry is [start, end].
+ */
+export const NONSPACING_MARK_RANGES: readonly (readonly [number, number])[] = [
+${body}
+]
+`
+
+  writeFileSync(`${dataDir}/combining-marks-data.ts`, output, 'utf8')
+  console.log(`Wrote combining-marks-data.ts: ${merged.length} ranges, ${totalCodePoints} code points`)
+}
+
 await generateConfusables()
 await generateScripts()
+await generateCombiningMarks()

@@ -1,7 +1,7 @@
 /**
  * Generated from Unicode's official confusables.txt (UTS #39 security
  * data), do not edit by hand. Regenerate with:
- *   node scripts/generate-confusables-data.mjs
+ *   node scripts/generate-unicode-data.mjs
  *
  * Source: https://www.unicode.org/Public/security/latest/confusables.txt
  * Unicode version: 17.0.0

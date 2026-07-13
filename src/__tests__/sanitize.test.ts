@@ -99,4 +99,25 @@ describe('sanitize', () => {
     const twice = sanitize(once)
     expect(twice).toBe(once)
   })
+
+  it('caps a Zalgo-style pile of combining marks at the threshold instead of stripping all of them', () => {
+    const acute = String.fromCodePoint(0x0301)
+    const result = sanitize(`e${acute.repeat(20)}`)
+    expect([...result]).toHaveLength(1 + 6)
+    expect(scan(result).safe).toBe(true)
+  })
+
+  it('never strips a reasonable number of combining marks on real text', () => {
+    // Arabic tashkeel marks built from code points rather than typed as
+    // literal diacritics in source, see the same pattern in scan.test.ts.
+    const fatha = String.fromCodePoint(0x064e)
+    const shadda = String.fromCodePoint(0x0651)
+    const sukun = String.fromCodePoint(0x0652)
+    const daggerAlif = String.fromCodePoint(0x0670)
+    const kasra = String.fromCodePoint(0x0650)
+    const arabic = `الر${shadda}${fatha}ح${sukun}م${fatha}${daggerAlif}ن${kasra}`
+    const hebrew = 'שָׁלוֹם'
+    expect(sanitize(arabic)).toBe(arabic)
+    expect(sanitize(hebrew)).toBe(hebrew)
+  })
 })
