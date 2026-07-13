@@ -51,7 +51,7 @@
     "eslint-plugin",
     "eslint-rule"
   ],
-  "license": "MIT",
+  "license": "(MIT AND Unicode-3.0)",
   "author": "Abdelrahman Youssef",
   "repository": {
     "type": "git",
