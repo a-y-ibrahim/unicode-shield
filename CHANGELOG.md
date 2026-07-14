@@ -4,6 +4,25 @@ All notable changes to this project are documented in this file. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-07-14
+
+### Added
+
+- `unicode-shield/eslint-plugin`'s `require-sanitized-text` rule now also
+  checks text-rendering JSX attributes (`alt`, `title`, `placeholder`,
+  `aria-label`, `value`), not just rendered children. A new
+  `riskyAttributes` option controls the checked attribute list, following
+  the same replace-the-default pattern as `riskyNames`. Previously
+  documented as an out-of-scope gap; closed.
+
+### Changed
+
+- Existing `require-sanitized-text` users may see new warnings on code that
+  previously passed, for example `<img alt={user.bio} />`, if attribute
+  values match a `riskyNames` entry. This is the intended effect of closing
+  the gap above, not a bug; adjust `riskyAttributes` to opt out of specific
+  attributes if needed.
+
 ## [0.3.0] - 2026-07-13
 
 ### Added
@@ -59,6 +78,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
   Unicode Tags block (U+E0000-U+E007F), and the Variation Selectors
   Supplement (U+E0100-U+E01EF).
 
+[0.4.0]: https://github.com/a-y-ibrahim/unicode-shield/releases/tag/v0.4.0
 [0.3.0]: https://github.com/a-y-ibrahim/unicode-shield/releases/tag/v0.3.0
 [0.2.1]: https://github.com/a-y-ibrahim/unicode-shield/releases/tag/v0.2.1
 [0.2.0]: https://github.com/a-y-ibrahim/unicode-shield/releases/tag/v0.2.0

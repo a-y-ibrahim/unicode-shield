@@ -1,6 +1,6 @@
 {
   "name": "unicode-shield",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Detect and sanitize dangerous Unicode in user-supplied text: bidi spoofing (Trojan Source), invisible characters, and Unicode Tag prompt-injection payloads, without breaking real RTL text or emoji.",
   "type": "module",
   "main": "./dist/index.cjs",

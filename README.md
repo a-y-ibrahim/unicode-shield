@@ -150,11 +150,13 @@ character keeps a reasonable, real-looking amount of decoration.
 this class of bug ships is a data path that never runs through either one:
 `unicode-shield/eslint-plugin` catches that at review time instead of in
 production, by checking whether identity-like text (a username, a handle, a
-display name, a bio) reaches JSX unsanitized. This is a code-structure check
-of the kind described in "Why not an existing tool?" above as source/CI
-scanning, not the runtime text scanning `scan()` does, and unlike a general
-source scanner it's specifically about whether *this library's* `sanitize()`
-sits in the path before a risky-looking value renders.
+display name, a bio) reaches JSX, as a rendered child or through a
+text-rendering attribute (`alt`, `title`, `placeholder`, `aria-label`,
+`value`), unsanitized. This is a code-structure check of the kind described
+in "Why not an existing tool?" above as source/CI scanning, not the runtime
+text scanning `scan()` does, and unlike a general source scanner it's
+specifically about whether *this library's* `sanitize()` sits in the path
+before a risky-looking value renders.
 
 ```js
 // eslint.config.js
@@ -169,7 +171,8 @@ export default [
 ```
 
 ```jsx
-<Text>{user.displayName}</Text>            // flagged
+<Text>{user.displayName}</Text>            // flagged, unsanitized child
+<img alt={user.bio} />                     // flagged, unsanitized attribute
 
 <Text>{sanitize(user.displayName)}</Text>  // fine
 
@@ -179,8 +182,9 @@ const safeName = sanitize(user.displayName)
 
 ### `require-sanitized-text`
 
-Flags a JSX child expression when it's a bare identifier or a property access
-with a statically known name, dot or bracket notation alike (`{username}`,
+Flags a JSX child expression, or the value of a text-rendering JSX
+attribute, when it's a bare identifier or a property access with a
+statically known name, dot or bracket notation alike (`{username}`,
 `{user.bio}`, `{user["bio"]}`), whose name matches a configured list of
 identity-like names, unless it's wrapped in `sanitize(...)` right there, or
 traced back exactly one declaration to a local variable assigned from a
@@ -189,13 +193,16 @@ traced back exactly one declaration to a local variable assigned from a
 | Option | Default | |
 | --- | --- | --- |
 | `riskyNames` | `['username', 'handle', 'displayname', 'nickname', 'bio']` | Case-insensitive substring match against the identifier or property name. Replaces the default list rather than extending it. |
+| `riskyAttributes` | `['alt', 'title', 'placeholder', 'aria-label', 'value']` | Exact, case-insensitive match against the JSX attribute name. Only these attributes are checked; anything else (`className`, `href`, `onClick`, ...) is never a text sink and is left alone. Replaces the default list rather than extending it. |
 | `sanitizerNames` | `['sanitize']` | Function names, bare or as a property (e.g. `unicodeShield.sanitize`), recognized as sanitizing their argument. |
 
 **What this rule deliberately doesn't do**, v1 scope rather than an
 oversight:
 
-- Checks only JSX *children* (`<Text>{x}</Text>`), not attributes
-  (`alt={x}`, `title={x}`). Attribute sinks are a known gap.
+- Checks JSX children and a fixed, curated list of text-rendering
+  attributes, not arbitrary attributes. A prop that isn't in
+  `riskyAttributes` (a custom component's own `label` prop, for example) is
+  never checked; add it to `riskyAttributes` if it needs the same coverage.
 - Understands only a bare identifier or one property access (a computed key
   like `user[someVariable]` can't be resolved statically and is skipped),
   and traces a variable back exactly one declaration. It's a naming

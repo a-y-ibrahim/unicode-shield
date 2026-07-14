@@ -40,9 +40,20 @@ ruleTester.run('require-sanitized-text', rule, {
     'const sanitizedUsername = sanitize(username); const el = <div>{sanitizedUsername}</div>',
     'function Profile({username}) { const sanitizedUsername = sanitize(username); return <div>{sanitizedUsername}</div> }',
 
-    // JSX attributes are out of scope for v1: only rendered children are checked.
-    '<div title={handle}>{count}</div>',
+    // Only text-rendering attributes are checked. onChange is a handler,
+    // not a text sink, so it's never analyzed regardless of the value's
+    // name (handleChange still matches the "handle" risky-name substring).
     '<input onChange={handleChange} />',
+
+    // A risky attribute with a value whose name isn't risky.
+    '<img alt={description} />',
+
+    // A risky-named value on an attribute that isn't a text sink.
+    '<div className={username} />',
+
+    // Sanitized inline in an attribute position, same as a child position.
+    '<img alt={sanitize(user.bio)} />',
+    'const safeBio = sanitize(user.bio); const el = <img alt={safeBio} />',
 
     // Calls other than the outer expression aren't analyzed (one-hop heuristic).
     '<div>{formatHandle(handle)}</div>',
@@ -120,6 +131,50 @@ ruleTester.run('require-sanitized-text', rule, {
       // risky as dot notation and must not be a way to slip past the rule.
       code: '<div>{user["username"]}</div>',
       errors: [{messageId: 'requireSanitize', data: {name: 'username'}}],
+    },
+    {
+      code: '<img alt={user.bio} />',
+      errors: [{messageId: 'requireSanitizeAttribute', data: {name: 'bio', attribute: 'alt'}}],
+    },
+    {
+      code: '<div title={handle}>{count}</div>',
+      errors: [{messageId: 'requireSanitizeAttribute', data: {name: 'handle', attribute: 'title'}}],
+    },
+    {
+      code: '<input placeholder={handle} />',
+      errors: [{messageId: 'requireSanitizeAttribute', data: {name: 'handle', attribute: 'placeholder'}}],
+    },
+    {
+      // Hyphenated attribute names (JSX allows these as a special case)
+      // must resolve the same way plain identifiers do.
+      code: '<div aria-label={user.username} />',
+      errors: [{messageId: 'requireSanitizeAttribute', data: {name: 'username', attribute: 'aria-label'}}],
+    },
+    {
+      code: '<input value={user.nickname} />',
+      errors: [{messageId: 'requireSanitizeAttribute', data: {name: 'nickname', attribute: 'value'}}],
+    },
+    {
+      // Computed member access works the same in an attribute position as
+      // it does in a child position.
+      code: '<img alt={user["bio"]} />',
+      errors: [{messageId: 'requireSanitizeAttribute', data: {name: 'bio', attribute: 'alt'}}],
+    },
+    {
+      // Both a risky child and a risky attribute on the same element are
+      // reported independently.
+      code: '<img alt={user.bio} title={user.displayName} />',
+      errors: [
+        {messageId: 'requireSanitizeAttribute', data: {name: 'bio', attribute: 'alt'}},
+        {messageId: 'requireSanitizeAttribute', data: {name: 'displayName', attribute: 'title'}},
+      ],
+    },
+    {
+      // A custom riskyAttributes list replaces the default, not merges with
+      // it, mirroring how riskyNames already behaves.
+      code: '<img data-testid={username} />',
+      options: [{riskyAttributes: ['data-testid']}],
+      errors: [{messageId: 'requireSanitizeAttribute', data: {name: 'username', attribute: 'data-testid'}}],
     },
   ],
 })
