@@ -161,6 +161,19 @@ ruleTester.run('require-sanitized-text', rule, {
       errors: [{messageId: 'requireSanitizeAttribute', data: {name: 'bio', attribute: 'alt'}}],
     },
     {
+      // Attribute checking looks at the attribute name only, not the tag,
+      // so a custom or third-party component (Avatar, Tooltip, ...) that
+      // happens to accept a same-named prop is covered exactly like a
+      // native HTML element.
+      code: '<Avatar alt={user.bio} />',
+      errors: [{messageId: 'requireSanitizeAttribute', data: {name: 'bio', attribute: 'alt'}}],
+    },
+    {
+      // riskyAttributes matching is case-insensitive, same as riskyNames.
+      code: '<img ALT={user.bio} />',
+      errors: [{messageId: 'requireSanitizeAttribute', data: {name: 'bio', attribute: 'ALT'}}],
+    },
+    {
       // Both a risky child and a risky attribute on the same element are
       // reported independently.
       code: '<img alt={user.bio} title={user.displayName} />',
