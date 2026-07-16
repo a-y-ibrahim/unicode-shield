@@ -1,4 +1,4 @@
-import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from 'node:fs'
+import {mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 
@@ -99,5 +99,21 @@ describe('resolveFiles / isDirectory / readTextFile', () => {
     const {files, unreadableDirectories} = resolveFiles(root)
     expect(files).toEqual([join(root, 'good', 'ok.txt')])
     expect(unreadableDirectories).toEqual([badDir])
+  })
+
+  it('does not infinitely recurse through a directory symlink that loops back to an ancestor', () => {
+    mkdirSync(join(root, 'sub'), {recursive: true})
+    writeFileSync(join(root, 'sub', 'real.txt'), 'hello', 'utf8')
+
+    try {
+      symlinkSync(root, join(root, 'sub', 'loop'), 'junction')
+    } catch {
+      // Creating a symlink needs Developer Mode or admin rights on
+      // Windows; skip rather than fail CI on a runner without either.
+      return
+    }
+
+    const {files} = resolveFiles(root)
+    expect(files).toContain(join(root, 'sub', 'real.txt'))
   })
 })
