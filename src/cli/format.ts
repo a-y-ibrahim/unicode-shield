@@ -18,7 +18,7 @@ function codePointHex(codePoint: number): string {
   return `U+${codePoint.toString(16).toUpperCase()}`
 }
 
-export function formatScanHuman(results: FileScanResult[]): string {
+export function formatScanHuman(results: FileScanResult[], unreadableDirectories: string[] = []): string {
   const lines: string[] = []
   let totalThreats = 0
   let filesWithThreats = 0
@@ -43,16 +43,24 @@ export function formatScanHuman(results: FileScanResult[]): string {
     }
   }
 
+  for (const dir of unreadableDirectories) {
+    lines.push(dir)
+    lines.push('  error: directory could not be read, its contents were not scanned')
+  }
+
   const summaryParts = [
     totalThreats === 0 ? 'No threats found' : `Found ${pluralize(totalThreats, 'threat')} in ${pluralize(filesWithThreats, 'file')}`,
     `${pluralize(results.length, 'file')} scanned`,
   ]
   if (filesWithErrors > 0) summaryParts.push(`${pluralize(filesWithErrors, 'file')} could not be read`)
+  if (unreadableDirectories.length > 0) {
+    summaryParts.push(`${pluralize(unreadableDirectories.length, 'directory')} could not be read`)
+  }
 
   return [...lines, '', `${summaryParts.join(', ')}.`].join('\n')
 }
 
-export function formatScanJson(results: FileScanResult[]): string {
-  const safe = results.every(result => result.safe && result.error === undefined)
-  return JSON.stringify({safe, filesScanned: results.length, files: results}, null, 2)
+export function formatScanJson(results: FileScanResult[], unreadableDirectories: string[] = []): string {
+  const safe = unreadableDirectories.length === 0 && results.every(result => result.safe && result.error === undefined)
+  return JSON.stringify({safe, filesScanned: results.length, files: results, unreadableDirectories}, null, 2)
 }

@@ -62,6 +62,13 @@ describe('formatScanHuman', () => {
     expect(output).toContain('permission denied')
     expect(output).toContain('1 file could not be read')
   })
+
+  it('reports an unreadable directory separately from unreadable files', () => {
+    const output = formatScanHuman([cleanFile], ['/some/locked-dir'])
+    expect(output).toContain('/some/locked-dir')
+    expect(output).toContain('contents were not scanned')
+    expect(output).toContain('1 directory could not be read')
+  })
 })
 
 describe('formatScanJson', () => {
@@ -84,5 +91,14 @@ describe('formatScanJson', () => {
     const parsed = JSON.parse(formatScanJson([threatFile])) as {filesScanned: number; files: FileScanResult[]}
     expect(parsed.filesScanned).toBe(1)
     expect(parsed.files[0]!.threats[0]!.category).toBe('bidi-embedding')
+  })
+
+  it('reports safe: false and includes the path when a directory could not be read, even if every found file was clean', () => {
+    const parsed = JSON.parse(formatScanJson([cleanFile], ['/some/locked-dir'])) as {
+      safe: boolean
+      unreadableDirectories: string[]
+    }
+    expect(parsed.safe).toBe(false)
+    expect(parsed.unreadableDirectories).toEqual(['/some/locked-dir'])
   })
 })

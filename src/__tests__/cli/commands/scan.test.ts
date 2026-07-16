@@ -1,11 +1,29 @@
-import {mkdtempSync, rmSync, writeFileSync} from 'node:fs'
+import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 
-import {afterEach, beforeEach, describe, expect, it} from 'vitest'
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest'
 
-import {parseArgs} from '../../../cli/args'
-import {runScan} from '../../../cli/commands/scan'
+// See src/__tests__/cli/file-walk.test.ts for why this indirection (rather
+// than vi.spyOn) is needed to simulate an unreadable directory: native ESM
+// module namespace objects can't be redefined directly.
+const unreadableDirTrigger = vi.hoisted(() => ({path: null as string | null}))
+
+vi.mock('node:fs', async importOriginal => {
+  const actual = await importOriginal<typeof import('node:fs')>()
+  return {
+    ...actual,
+    readdirSync: (dir: Parameters<typeof actual.readdirSync>[0], options: Parameters<typeof actual.readdirSync>[1]) => {
+      if (dir === unreadableDirTrigger.path) {
+        throw new Error('EACCES: permission denied (simulated)')
+      }
+      return actual.readdirSync(dir, options)
+    },
+  }
+})
+
+const {parseArgs} = await import('../../../cli/args')
+const {runScan} = await import('../../../cli/commands/scan')
 
 const RLO = String.fromCodePoint(0x202e)
 
@@ -17,6 +35,7 @@ describe('runScan', () => {
   })
 
   afterEach(() => {
+    unreadableDirTrigger.path = null
     rmSync(root, {recursive: true, force: true})
   })
 
@@ -62,5 +81,19 @@ describe('runScan', () => {
     const result = runScan(parseArgs([root]))
     expect(result.exitCode).toBe(1)
     expect(result.output).toContain('Found 1 threat in 1 file, 2 files scanned')
+  })
+
+  it('exits 1 and reports the path, not silently 0, when a subdirectory could not be read', () => {
+    mkdirSync(join(root, 'locked'), {recursive: true})
+    writeFileSync(join(root, 'clean.txt'), 'hello', 'utf8')
+    writeFileSync(join(root, 'locked', 'hidden.txt'), 'hello', 'utf8')
+
+    const lockedDir = join(root, 'locked')
+    unreadableDirTrigger.path = lockedDir
+
+    const result = runScan(parseArgs([root]))
+    expect(result.exitCode).toBe(1)
+    expect(result.output).toContain(lockedDir)
+    expect(result.output).toContain('1 directory could not be read')
   })
 })

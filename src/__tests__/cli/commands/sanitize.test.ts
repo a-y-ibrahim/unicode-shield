@@ -1,11 +1,29 @@
-import {mkdtempSync, readFileSync, rmSync, writeFileSync} from 'node:fs'
+import {mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 
-import {afterEach, beforeEach, describe, expect, it} from 'vitest'
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest'
 
-import {parseArgs} from '../../../cli/args'
-import {runSanitize} from '../../../cli/commands/sanitize'
+// See src/__tests__/cli/file-walk.test.ts for why this indirection (rather
+// than vi.spyOn) is needed to simulate an unreadable directory: native ESM
+// module namespace objects can't be redefined directly.
+const unreadableDirTrigger = vi.hoisted(() => ({path: null as string | null}))
+
+vi.mock('node:fs', async importOriginal => {
+  const actual = await importOriginal<typeof import('node:fs')>()
+  return {
+    ...actual,
+    readdirSync: (dir: Parameters<typeof actual.readdirSync>[0], options: Parameters<typeof actual.readdirSync>[1]) => {
+      if (dir === unreadableDirTrigger.path) {
+        throw new Error('EACCES: permission denied (simulated)')
+      }
+      return actual.readdirSync(dir, options)
+    },
+  }
+})
+
+const {parseArgs} = await import('../../../cli/args')
+const {runSanitize} = await import('../../../cli/commands/sanitize')
 
 const RLO = String.fromCodePoint(0x202e)
 const ZWSP = String.fromCodePoint(0x200b)
@@ -18,6 +36,7 @@ describe('runSanitize', () => {
   })
 
   afterEach(() => {
+    unreadableDirTrigger.path = null
     rmSync(root, {recursive: true, force: true})
   })
 
@@ -93,5 +112,19 @@ describe('runSanitize', () => {
     writeFileSync(filePath, `admin${ZWSP}`, 'utf8')
     const result = runSanitize(parseArgs([filePath]))
     expect(result.output).toBe('admin')
+  })
+
+  it('reports an unreadable subdirectory as an error under --write, without losing the files it could reach', () => {
+    mkdirSync(join(root, 'locked'), {recursive: true})
+    writeFileSync(join(root, 'a.txt'), `x${RLO}y`, 'utf8')
+    writeFileSync(join(root, 'locked', 'hidden.txt'), `x${RLO}y`, 'utf8')
+
+    const lockedDir = join(root, 'locked')
+    unreadableDirTrigger.path = lockedDir
+
+    const result = runSanitize(parseArgs([root, '--write']))
+    expect(result.exitCode).toBe(2)
+    expect(result.output).toContain(lockedDir)
+    expect(readFileSync(join(root, 'a.txt'), 'utf8')).toBe('xy')
   })
 })

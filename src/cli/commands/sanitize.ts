@@ -44,15 +44,17 @@ export function runSanitize(args: ParsedArgs): CommandResult {
 
   const options = buildOptions(args)
   let paths: string[]
+  let unreadableDirectories: string[]
   try {
-    paths = resolveFiles(inputPath)
+    ;({files: paths, unreadableDirectories} = resolveFiles(inputPath))
   } catch (error) {
     return {exitCode: 2, output: `Error: ${error instanceof Error ? error.message : String(error)}`}
   }
 
   if (!write) {
     // Single file, no --write: print sanitized content to stdout, the
-    // sed/prettier convention of a safe, non-destructive default.
+    // sed/prettier convention of a safe, non-destructive default. A single
+    // file can never itself contain an unreadable subdirectory.
     const [onlyPath] = paths
     if (onlyPath === undefined) return {exitCode: 0, output: ''}
     const text = readTextFile(onlyPath)
@@ -60,7 +62,7 @@ export function runSanitize(args: ParsedArgs): CommandResult {
   }
 
   let changedCount = 0
-  const errors: string[] = []
+  const errors: string[] = unreadableDirectories.map(dir => `${dir}: directory could not be read, its contents were not sanitized`)
   for (const path of paths) {
     try {
       const text = readTextFile(path)

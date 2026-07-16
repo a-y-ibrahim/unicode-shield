@@ -14,8 +14,9 @@ export function runScan(args: ParsedArgs): CommandResult {
   }
 
   let paths: string[]
+  let unreadableDirectories: string[]
   try {
-    paths = resolveFiles(inputPath)
+    ;({files: paths, unreadableDirectories} = resolveFiles(inputPath))
   } catch (error) {
     return {exitCode: 2, output: `Error: ${error instanceof Error ? error.message : String(error)}`}
   }
@@ -36,10 +37,11 @@ export function runScan(args: ParsedArgs): CommandResult {
   })
 
   const useJson = flagAsBoolean(args.flags, 'json')
-  const overallSafe = results.every(result => result.safe && result.error === undefined)
+  const overallSafe =
+    unreadableDirectories.length === 0 && results.every(result => result.safe && result.error === undefined)
 
   return {
     exitCode: overallSafe ? 0 : 1,
-    output: useJson ? formatScanJson(results) : formatScanHuman(results),
+    output: useJson ? formatScanJson(results, unreadableDirectories) : formatScanHuman(results, unreadableDirectories),
   }
 }
