@@ -4,6 +4,19 @@ All notable changes to this project are documented in this file. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - 2026-07-16
+
+### Added
+
+- A command line tool, installed alongside the library: `unicode-shield
+  scan <path>`, `unicode-shield sanitize <path>`, and `unicode-shield
+  compare <a> <b>`, covering `scan()`, `sanitize()`, and `areConfusable()`
+  respectively for files and directories, no code required. Supports
+  `--json` output, recursive directory scanning (skipping `node_modules`,
+  `.git`, and binary files), and standard exit codes (`0` clean, `1`
+  threat or confusable pair found, `2` usage or runtime error) for CI use.
+  See the README's CLI section for full usage.
+
 ## [0.4.0] - 2026-07-14
 
 ### Added
@@ -78,6 +91,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
   Unicode Tags block (U+E0000-U+E007F), and the Variation Selectors
   Supplement (U+E0100-U+E01EF).
 
+[0.5.0]: https://github.com/a-y-ibrahim/unicode-shield/releases/tag/v0.5.0
 [0.4.0]: https://github.com/a-y-ibrahim/unicode-shield/releases/tag/v0.4.0
 [0.3.0]: https://github.com/a-y-ibrahim/unicode-shield/releases/tag/v0.3.0
 [0.2.1]: https://github.com/a-y-ibrahim/unicode-shield/releases/tag/v0.2.1

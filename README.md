@@ -275,6 +275,50 @@ Keeping it out of the core `unicode-shield` import means `scan`/`sanitize`
 callers who don't need homoglyph detection pay nothing for it: `dist/index.js`
 is unaffected by this feature's size.
 
+## CLI
+
+Everything above is a library API. `unicode-shield` also installs a
+command line tool, for scanning files and directories without writing any
+code, for example in a CI step that checks user-generated content dumps
+or translation files.
+
+```bash
+npx unicode-shield scan ./content
+npx unicode-shield scan file.txt --json
+npx unicode-shield sanitize file.txt > clean.txt
+npx unicode-shield sanitize ./content --write
+npx unicode-shield compare "apple" "аpple"
+```
+
+### `unicode-shield scan <path>`
+
+Scans a file, or every file in a directory recursively (skipping
+`node_modules`, `.git`, and a handful of other build/dependency
+directories, plus a denylist of binary file extensions), and reports
+every threat found via `scan()`. Exits `1` if any dangerous threat was
+found, `0` if clean. `--json` prints structured output instead of the
+human-readable default.
+
+### `unicode-shield sanitize <path>`
+
+Runs `sanitize()` over a file or directory. For a single file without
+`--write`, prints the sanitized content to stdout, so it can be piped:
+`unicode-shield sanitize in.txt > out.txt`. `--write` modifies file(s) in
+place instead (required for a directory, since there's no single stdout
+stream to usefully print multiple files to). `--replacement <str>` and
+`--categories <a,b,c>` map directly to `sanitize()`'s own options.
+
+### `unicode-shield compare <a> <b>`
+
+Runs `areConfusable()` on two strings directly, for checking whether a
+newly chosen username or display name is visually indistinguishable from
+an existing one. Exits `1` if they're confusable, `0` if not. `--json`
+also includes both strings' skeletons.
+
+Exit codes across all three commands: `0` clean, `1` a threat or
+confusable pair was found, `2` a usage or runtime error (bad arguments, a
+path that doesn't exist).
+
 ## What this is not
 
 This is not a source-code scanner or a profanity filter. Confusable and

@@ -1,11 +1,14 @@
 {
   "name": "unicode-shield",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Detect and sanitize dangerous Unicode in user-supplied text: bidi spoofing (Trojan Source), invisible characters, and Unicode Tag prompt-injection payloads, without breaking real RTL text or emoji.",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "unicode-shield": "./dist/cli.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -51,7 +54,9 @@
     "homoglyphs",
     "eslint-plugin",
     "eslint-rule",
-    "zalgo"
+    "zalgo",
+    "cli",
+    "command-line"
   ],
   "license": "(MIT AND Unicode-3.0)",
   "author": "Abdelrahman Youssef",
@@ -75,6 +80,7 @@
     }
   },
   "devDependencies": {
+    "@types/node": "^22.20.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
     "eslint": "^9.0.0",
