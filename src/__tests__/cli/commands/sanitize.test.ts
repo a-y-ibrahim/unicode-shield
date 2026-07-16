@@ -107,6 +107,35 @@ describe('runSanitize', () => {
     expect(stripped.output).toBe('price')
   })
 
+  it('accepts a comma-separated --categories list with spaces around each name', () => {
+    const filePath = join(root, 'marked.txt')
+    const lrm = String.fromCodePoint(0x200e)
+    const zwj = String.fromCodePoint(0x200d)
+    writeFileSync(filePath, `price${lrm}${zwj}`, 'utf8')
+    const result = runSanitize(parseArgs([filePath, '--categories', 'bidi-mark, joiner']))
+    expect(result.output).toBe('price')
+  })
+
+  it('rejects an unrecognized --categories value instead of silently stripping nothing extra', () => {
+    // The exact, realistic typo this exists to catch: the real category is
+    // singular "bidi-mark", not plural.
+    const filePath = join(root, 'x.txt')
+    writeFileSync(filePath, 'hello', 'utf8')
+    const result = runSanitize(parseArgs([filePath, '--categories', 'bidi-marks']))
+    expect(result.exitCode).toBe(2)
+    expect(result.output).toContain('bidi-marks')
+    expect(result.output).toContain('bidi-mark')
+  })
+
+  it('lists every invalid name when --categories has more than one typo', () => {
+    const filePath = join(root, 'x.txt')
+    writeFileSync(filePath, 'hello', 'utf8')
+    const result = runSanitize(parseArgs([filePath, '--categories', 'nope,alsonope']))
+    expect(result.exitCode).toBe(2)
+    expect(result.output).toContain('nope')
+    expect(result.output).toContain('alsonope')
+  })
+
   it('strips a zero-width space by default, confirming the invisible category is covered', () => {
     const filePath = join(root, 'zwsp.txt')
     writeFileSync(filePath, `admin${ZWSP}`, 'utf8')

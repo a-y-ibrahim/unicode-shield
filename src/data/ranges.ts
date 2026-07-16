@@ -158,6 +158,16 @@ export function severityOf(category: ThreatCategory): Severity {
   return SEVERITY_BY_CATEGORY[category]
 }
 
+/**
+ * Every valid ThreatCategory, derived from SEVERITY_BY_CATEGORY's own keys
+ * rather than listed separately, so this can never drift out of sync: the
+ * Record<ThreatCategory, Severity> type above already forces that object
+ * to have every category as a key, TypeScript won't compile otherwise.
+ * For runtime validation of a category name from outside the type system
+ * (a CLI flag, in particular), where the type checker can't help.
+ */
+export const ALL_THREAT_CATEGORIES: readonly ThreatCategory[] = Object.keys(SEVERITY_BY_CATEGORY) as ThreatCategory[]
+
 export function classify(codePoint: number): ThreatCategory | null {
   if (BIDI_EMBEDDINGS.some(c => c.codePoint === codePoint)) return 'bidi-embedding'
   if (BIDI_ISOLATES.some(c => c.codePoint === codePoint)) return 'bidi-isolate'
