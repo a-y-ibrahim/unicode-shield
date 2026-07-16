@@ -6,8 +6,10 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest'
 
 // See src/__tests__/cli/file-walk.test.ts for why this indirection (rather
 // than vi.spyOn) is needed to simulate an unreadable directory: native ESM
-// module namespace objects can't be redefined directly.
+// module namespace objects can't be redefined directly. Same reasoning for
+// stdinContentTrigger, used to simulate piped stdin content.
 const unreadableDirTrigger = vi.hoisted(() => ({path: null as string | null}))
+const stdinContentTrigger = vi.hoisted(() => ({content: null as string | null}))
 
 vi.mock('node:fs', async importOriginal => {
   const actual = await importOriginal<typeof import('node:fs')>()
@@ -18,6 +20,12 @@ vi.mock('node:fs', async importOriginal => {
         throw new Error('EACCES: permission denied (simulated)')
       }
       return actual.readdirSync(dir, options)
+    },
+    readFileSync: (path: Parameters<typeof actual.readFileSync>[0], options: Parameters<typeof actual.readFileSync>[1]) => {
+      if (path === 0 && stdinContentTrigger.content !== null) {
+        return stdinContentTrigger.content
+      }
+      return actual.readFileSync(path, options)
     },
   }
 })
@@ -36,6 +44,7 @@ describe('runScan', () => {
 
   afterEach(() => {
     unreadableDirTrigger.path = null
+    stdinContentTrigger.content = null
     rmSync(root, {recursive: true, force: true})
   })
 
@@ -95,5 +104,28 @@ describe('runScan', () => {
     expect(result.exitCode).toBe(1)
     expect(result.output).toContain(lockedDir)
     expect(result.output).toContain('1 directory could not be read')
+  })
+
+  it('scans stdin content when the path is -, labeling it (stdin) rather than a file path', () => {
+    stdinContentTrigger.content = `admin${RLO}nimda`
+    const result = runScan(parseArgs(['-']))
+    expect(result.exitCode).toBe(1)
+    expect(result.output).toContain('(stdin)')
+    expect(result.output).toContain('bidi-embedding')
+  })
+
+  it('exits 0 for clean stdin content', () => {
+    stdinContentTrigger.content = 'hello world'
+    const result = runScan(parseArgs(['-']))
+    expect(result.exitCode).toBe(0)
+    expect(result.output).toContain('No threats found')
+  })
+
+  it('produces valid JSON for stdin with --json, same shape as a file scan', () => {
+    stdinContentTrigger.content = `admin${RLO}nimda`
+    const result = runScan(parseArgs(['-', '--json']))
+    const parsed = JSON.parse(result.output) as {safe: boolean; files: Array<{path: string}>}
+    expect(parsed.safe).toBe(false)
+    expect(parsed.files[0]!.path).toBe('(stdin)')
   })
 })

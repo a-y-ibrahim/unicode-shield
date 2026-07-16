@@ -5,9 +5,10 @@ import {sanitize} from '../../sanitize'
 import type {SanitizeOptions, ThreatCategory} from '../../types'
 import {flagAsBoolean, flagAsString, type ParsedArgs} from '../args'
 import {isDirectory, resolveFiles, readTextFile} from '../file-walk'
+import {STDIN_ARG, readStdin} from '../stdin'
 import type {CommandResult} from '../types'
 
-const USAGE = 'Usage: unicode-shield sanitize <path> [--write] [--replacement <str>] [--categories <a,b,c>]'
+const USAGE = 'Usage: unicode-shield sanitize <path> [--write] [--replacement <str>] [--categories <a,b,c>]  (path can be - for stdin, but not with --write)'
 
 /**
  * `--categories` arrives as an untyped string from argv, `as ThreatCategory[]`
@@ -50,6 +51,29 @@ export function runSanitize(args: ParsedArgs): CommandResult {
 
   const write = flagAsBoolean(args.flags, 'write')
 
+  const parsedOptions = buildOptions(args)
+  if ('error' in parsedOptions) {
+    return {exitCode: 2, output: `Error: ${parsedOptions.error}`}
+  }
+  const {options} = parsedOptions
+
+  if (inputPath === STDIN_ARG) {
+    // stdin isn't a file, there's nothing for --write to write back to.
+    if (write) {
+      return {
+        exitCode: 2,
+        output: 'Error: --write cannot be used when reading from stdin (there is no file to write back to).',
+      }
+    }
+    let text: string
+    try {
+      text = readStdin()
+    } catch (error) {
+      return {exitCode: 2, output: `Error reading stdin: ${error instanceof Error ? error.message : String(error)}`}
+    }
+    return {exitCode: 0, output: sanitize(text, options)}
+  }
+
   let directory: boolean
   try {
     directory = isDirectory(inputPath)
@@ -66,12 +90,6 @@ export function runSanitize(args: ParsedArgs): CommandResult {
       output: 'Error: sanitizing a directory requires --write (there is no single stdout stream for multiple files).',
     }
   }
-
-  const parsedOptions = buildOptions(args)
-  if ('error' in parsedOptions) {
-    return {exitCode: 2, output: `Error: ${parsedOptions.error}`}
-  }
-  const {options} = parsedOptions
 
   let paths: string[]
   let unreadableDirectories: string[]

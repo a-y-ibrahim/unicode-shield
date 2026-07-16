@@ -288,25 +288,32 @@ npx unicode-shield scan file.txt --json
 npx unicode-shield sanitize file.txt > clean.txt
 npx unicode-shield sanitize ./content --write
 npx unicode-shield compare "apple" "аpple"
+
+# - means stdin, the standard grep/jq convention, for real Unix pipelines
+cat file.txt | npx unicode-shield scan -
+some-tool | npx unicode-shield sanitize - | another-tool
 ```
 
 ### `unicode-shield scan <path>`
 
-Scans a file, or every file in a directory recursively (skipping
+Scans a file, every file in a directory recursively (skipping
 `node_modules`, `.git`, and a handful of other build/dependency
-directories, plus a denylist of binary file extensions), and reports
-every threat found via `scan()`. Exits `1` if any dangerous threat was
-found, `0` if clean. `--json` prints structured output instead of the
-human-readable default.
+directories, plus a denylist of binary file extensions), or stdin when
+`path` is `-`, and reports every threat found via `scan()`. Exits `1` if
+any dangerous threat was found, `0` if clean. `--json` prints structured
+output instead of the human-readable default.
 
 ### `unicode-shield sanitize <path>`
 
-Runs `sanitize()` over a file or directory. For a single file without
-`--write`, prints the sanitized content to stdout, so it can be piped:
-`unicode-shield sanitize in.txt > out.txt`. `--write` modifies file(s) in
-place instead (required for a directory, since there's no single stdout
-stream to usefully print multiple files to). `--replacement <str>` and
-`--categories <a,b,c>` map directly to `sanitize()`'s own options.
+Runs `sanitize()` over a file, a directory, or stdin when `path` is `-`.
+Without `--write`, prints the sanitized content to stdout, so it can be
+piped: `unicode-shield sanitize in.txt > out.txt`. `--write` modifies
+file(s) in place instead: required for a directory (there's no single
+stdout stream to usefully print multiple files to), and rejected for
+stdin (there's no file to write back to). `--replacement <str>` and
+`--categories <a,b,c>` map directly to `sanitize()`'s own options; an
+unrecognized category name is rejected with the valid list rather than
+silently doing nothing.
 
 ### `unicode-shield compare <a> <b>`
 

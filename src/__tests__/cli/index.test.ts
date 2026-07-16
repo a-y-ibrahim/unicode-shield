@@ -14,6 +14,10 @@ describe('run (command dispatch)', () => {
     expect(run(['-h']).output).toContain('Commands:')
   })
 
+  it('mentions stdin support in the help text', () => {
+    expect(run(['--help']).output).toContain('stdin')
+  })
+
   it('shows a real semver-looking version for --version and -v', () => {
     const versionPattern = /^\d+\.\d+\.\d+$/
     expect(run(['--version']).output).toMatch(versionPattern)

@@ -14,13 +14,13 @@ Detect and sanitize dangerous Unicode: bidi spoofing, invisible characters,
 Zalgo-style combining-mark stacking, and visually confusable characters.
 
 Commands:
-  scan <path>          Scan a file or directory for threats
-  sanitize <path>       Strip dangerous characters from a file or directory
+  scan <path>          Scan a file, directory, or - for stdin, for threats
+  sanitize <path>       Strip dangerous characters from a file, directory, or -
   compare <a> <b>        Check whether two strings are visually confusable
 
 Options:
   --json                 Machine-readable JSON output (scan, compare)
-  --write                  Modify files in place (sanitize)
+  --write                  Modify files in place (sanitize, not with -)
   --replacement <str>        Substitute string instead of deleting (sanitize)
   --categories <a,b,c>          Also strip these categories (sanitize)
   --help, -h                      Show this help
@@ -32,6 +32,8 @@ Examples:
   unicode-shield sanitize file.txt > clean.txt
   unicode-shield sanitize ./data --write
   unicode-shield compare "apple" "аpple"
+  cat file.txt | unicode-shield scan -
+  some-tool | unicode-shield sanitize - | another-tool
 
 Exit codes: 0 clean, 1 threat or confusable pair found, 2 usage or runtime error.`
 

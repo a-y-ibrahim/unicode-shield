@@ -180,15 +180,19 @@ npx unicode-shield scan file.txt --json
 npx unicode-shield sanitize file.txt > clean.txt
 npx unicode-shield sanitize ./content --write
 npx unicode-shield compare "apple" "аpple"
+
+# - تعني stdin، نفس الاصطلاح المعروف في grep وjq، لبناء أنابيب Unix حقيقية
+cat file.txt | npx unicode-shield scan -
+some-tool | npx unicode-shield sanitize - | another-tool
 ```
 
 ### `unicode-shield scan <path>`
 
-تفحص ملفا واحدا، أو كل ملف داخل مجلد بشكل متكرر (تتجاوز `node_modules` و`.git` وعددا من مجلدات البناء والتبعيات الأخرى، وقائمة محددة من امتدادات الملفات الثنائية)، وتبلغ عن كل تهديد ترصده `scan()`. تخرج بالرمز `1` إذا وجد أي تهديد خطر، و`0` إذا كان كل شيء سليما. خيار `--json` يطبع مخرجات منظمة بدل الشكل المقروء الافتراضي.
+تفحص ملفا واحدا، أو كل ملف داخل مجلد بشكل متكرر (تتجاوز `node_modules` و`.git` وعددا من مجلدات البناء والتبعيات الأخرى، وقائمة محددة من امتدادات الملفات الثنائية)، أو stdin عندما يكون المسار `-`، وتبلغ عن كل تهديد ترصده `scan()`. تخرج بالرمز `1` إذا وجد أي تهديد خطر، و`0` إذا كان كل شيء سليما. خيار `--json` يطبع مخرجات منظمة بدل الشكل المقروء الافتراضي.
 
 ### `unicode-shield sanitize <path>`
 
-تشغل `sanitize()` على ملف أو مجلد. لملف واحد بلا `--write`، تطبع المحتوى بعد التطهير إلى stdout، فيمكن تمريره عبر أنبوب: `unicode-shield sanitize in.txt > out.txt`. أما `--write` فتعدل الملف أو الملفات في مكانها مباشرة، وهذا إلزامي عند فحص مجلد كامل، إذ لا يوجد مجرى stdout واحد يصلح لطباعة عدة ملفات فيه بشكل مفيد. وخياري `--replacement <str>` و`--categories <a,b,c>` ينقلان مباشرة إلى خيارات `sanitize()` نفسها.
+تشغل `sanitize()` على ملف أو مجلد أو stdin عندما يكون المسار `-`. بلا `--write`، تطبع المحتوى بعد التطهير إلى stdout، فيمكن تمريره عبر أنبوب: `unicode-shield sanitize in.txt > out.txt`. أما `--write` فتعدل الملف أو الملفات في مكانها مباشرة: إلزامي عند فحص مجلد كامل (إذ لا يوجد مجرى stdout واحد يصلح لطباعة عدة ملفات فيه بشكل مفيد)، ومرفوض مع stdin (إذ لا يوجد أصلا ملف تكتب إليه). وخياري `--replacement <str>` و`--categories <a,b,c>` ينقلان مباشرة إلى خيارات `sanitize()` نفسها، واسم فئة غير معروف يرفض مع عرض القائمة الصحيحة بدل تجاهله بصمت.
 
 ### `unicode-shield compare <a> <b>`
 

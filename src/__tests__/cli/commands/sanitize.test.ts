@@ -6,8 +6,10 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest'
 
 // See src/__tests__/cli/file-walk.test.ts for why this indirection (rather
 // than vi.spyOn) is needed to simulate an unreadable directory: native ESM
-// module namespace objects can't be redefined directly.
+// module namespace objects can't be redefined directly. Same reasoning for
+// stdinContentTrigger, used to simulate piped stdin content.
 const unreadableDirTrigger = vi.hoisted(() => ({path: null as string | null}))
+const stdinContentTrigger = vi.hoisted(() => ({content: null as string | null}))
 
 vi.mock('node:fs', async importOriginal => {
   const actual = await importOriginal<typeof import('node:fs')>()
@@ -18,6 +20,12 @@ vi.mock('node:fs', async importOriginal => {
         throw new Error('EACCES: permission denied (simulated)')
       }
       return actual.readdirSync(dir, options)
+    },
+    readFileSync: (path: Parameters<typeof actual.readFileSync>[0], options: Parameters<typeof actual.readFileSync>[1]) => {
+      if (path === 0 && stdinContentTrigger.content !== null) {
+        return stdinContentTrigger.content
+      }
+      return actual.readFileSync(path, options)
     },
   }
 })
@@ -37,6 +45,7 @@ describe('runSanitize', () => {
 
   afterEach(() => {
     unreadableDirTrigger.path = null
+    stdinContentTrigger.content = null
     rmSync(root, {recursive: true, force: true})
   })
 
@@ -155,5 +164,40 @@ describe('runSanitize', () => {
     expect(result.exitCode).toBe(2)
     expect(result.output).toContain(lockedDir)
     expect(readFileSync(join(root, 'a.txt'), 'utf8')).toBe('xy')
+  })
+
+  it('sanitizes stdin content and prints the result, when the path is -', () => {
+    stdinContentTrigger.content = `admin${RLO}nimda`
+    const result = runSanitize(parseArgs(['-']))
+    expect(result.exitCode).toBe(0)
+    expect(result.output).toBe('adminnimda')
+  })
+
+  it('leaves clean stdin content unchanged', () => {
+    stdinContentTrigger.content = 'hello world'
+    const result = runSanitize(parseArgs(['-']))
+    expect(result.output).toBe('hello world')
+  })
+
+  it('applies --replacement and --categories to stdin content the same as a file', () => {
+    const lrm = String.fromCodePoint(0x200e)
+    stdinContentTrigger.content = `price${lrm}`
+    const result = runSanitize(parseArgs(['-', '--categories', 'bidi-mark']))
+    expect(result.output).toBe('price')
+  })
+
+  it('rejects --write with stdin input, there is no file to write back to', () => {
+    stdinContentTrigger.content = `admin${RLO}nimda`
+    const result = runSanitize(parseArgs(['-', '--write']))
+    expect(result.exitCode).toBe(2)
+    expect(result.output).toContain('--write')
+    expect(result.output).toContain('stdin')
+  })
+
+  it('still validates --categories for stdin input before reading anything', () => {
+    stdinContentTrigger.content = 'hello'
+    const result = runSanitize(parseArgs(['-', '--categories', 'bidi-marks']))
+    expect(result.exitCode).toBe(2)
+    expect(result.output).toContain('bidi-marks')
   })
 })

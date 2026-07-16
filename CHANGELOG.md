@@ -4,6 +4,16 @@ All notable changes to this project are documented in this file. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] - 2026-07-16
+
+### Added
+
+- `unicode-shield scan` and `unicode-shield sanitize` now accept `-` as
+  the path, meaning stdin, the standard `grep`/`jq` convention. Enables
+  real Unix pipelines: `cat file.txt | unicode-shield scan -`, or
+  `some-tool | unicode-shield sanitize - | another-tool`. `--write` is
+  rejected with stdin input, since there's no file to write back to.
+
 ## [0.5.0] - 2026-07-16
 
 ### Added
@@ -91,6 +101,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
   Unicode Tags block (U+E0000-U+E007F), and the Variation Selectors
   Supplement (U+E0100-U+E01EF).
 
+[0.6.0]: https://github.com/a-y-ibrahim/unicode-shield/releases/tag/v0.6.0
 [0.5.0]: https://github.com/a-y-ibrahim/unicode-shield/releases/tag/v0.5.0
 [0.4.0]: https://github.com/a-y-ibrahim/unicode-shield/releases/tag/v0.4.0
 [0.3.0]: https://github.com/a-y-ibrahim/unicode-shield/releases/tag/v0.3.0
