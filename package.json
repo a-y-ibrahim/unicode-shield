@@ -80,13 +80,13 @@
     }
   },
   "devDependencies": {
-    "@types/node": "^22.20.0",
+    "@types/node": "^26.1.1",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
-    "eslint": "^9.0.0",
+    "eslint": "^10.7.0",
     "tsup": "^8.0.0",
-    "typescript": "^5.5.0",
-    "vite": "^7.0.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.1.5",
     "vitest": "^4.0.0"
   },
   "engines": {
