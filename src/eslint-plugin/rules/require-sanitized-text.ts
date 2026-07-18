@@ -30,7 +30,9 @@ interface AstNode {
   specifiers?: AstNode[]
   source?: AstNode
   local?: AstNode
+  imported?: AstNode
   importKind?: string
+  sourceType?: string
 }
 
 /** An Identifier node's own name, narrowed from the shared `string |
@@ -193,26 +195,30 @@ function getCheckedPosition(node: AstNode, riskyAttributes: string[]): CheckedPo
  * once per fix:
  * - already-imported: a module-scope binding named autoImport.name already
  *   exists, and it's exactly the thing we'd otherwise import: a named (not
- *   default/namespace), non-type-only specifier from exactly
+ *   default/namespace), non-type-only specifier importing exactly
+ *   autoImport.name (not some other export aliased to this local name,
+ *   `import {scan as sanitize}` doesn't count) from exactly
  *   autoImport.source. The fixer only needs to wrap the value.
- * - unsafe: a module-scope binding named autoImport.name already exists,
- *   but it's something else entirely, a different import, a local
- *   const/function/class, a default/namespace import, or a type-only one.
- *   Inserting another binding under that name would be a duplicate
- *   declaration (a real SyntaxError, confirmed directly: ESLint's own
- *   `--fix` has no safety net that rejects a fix producing unparseable
- *   output, it writes whatever `output` it computes), and silently calling
- *   whatever's already bound to that name could run something unrelated
- *   instead of sanitizing anything. No fix is offered in this case.
+ * - unsafe: either a module-scope binding named autoImport.name already
+ *   exists but isn't the exact thing above (a different import, a local
+ *   const/function/class, a default/namespace import, a type-only one, or
+ *   an aliased import of an unrelated export), or there's no such binding
+ *   but the file's sourceType isn't 'module' (inserting an ES `import`
+ *   there is itself a SyntaxError). Either way this is a real, confirmed
+ *   way to produce unparseable or silently-wrong output: ESLint's own
+ *   `--fix` has no safety net that rejects a fix producing broken output,
+ *   it writes whatever `output` it computes, so no fix is offered here at
+ *   all rather than risking either failure mode.
  * - add-specifier: no existing binding for autoImport.name at all, but an
  *   import from `source` exists with a named ({...}) block that isn't
  *   type-only; append the name there instead of creating a second import
  *   statement from the same source.
- * - add-declaration: no existing binding for autoImport.name, and no usable
+ * - add-declaration: no existing binding for autoImport.name, no usable
  *   value import from `source` to extend either (covers no import at all,
- *   a default/namespace-only import, and a type-only one). Inserts a fresh
- *   `import {name} from 'source'`, after the last existing import if there
- *   is one, otherwise before the file's first statement.
+ *   a default/namespace-only import, and a type-only one), and the file's
+ *   sourceType is 'module'. Inserts a fresh `import {name} from 'source'`,
+ *   after the last existing import if there is one, otherwise before the
+ *   file's first statement.
  */
 type ImportFixPlan =
   | {kind: 'already-imported'}
@@ -228,7 +234,9 @@ interface ScopeDefinition {
 
 function isSanitizerImportBinding(definition: ScopeDefinition, autoImport: AutoImportConfig): boolean {
   if (definition.type !== 'ImportBinding') return false
-  if (definition.node.type !== 'ImportSpecifier' || definition.node.importKind === 'type') return false
+  const specifier = definition.node
+  if (specifier.type !== 'ImportSpecifier' || specifier.importKind === 'type') return false
+  if (specifier.imported == null || getIdentifierName(specifier.imported) !== autoImport.name) return false
   const declaration = definition.parent
   return declaration != null && declaration.source?.value === autoImport.source && declaration.importKind !== 'type'
 }
@@ -265,6 +273,12 @@ function planSanitizerImportFix(context: Rule.RuleContext, program: AstNode, aut
   if (lastNamedSpecifierFromSource) {
     return {kind: 'add-specifier', lastSpecifier: lastNamedSpecifierFromSource}
   }
+  // No existing import to extend: about to insert a fresh `import`
+  // statement, which is itself a SyntaxError outside of sourceType
+  // 'module' (confirmed directly), so this is the one place that check
+  // matters, add-specifier only reaches here via an ImportDeclaration
+  // that already parsed, which is impossible under any other sourceType.
+  if (program.sourceType !== 'module') return {kind: 'unsafe'}
   return {kind: 'add-declaration', afterImport: lastImportDeclaration, beforeStatement: body[0] ?? null}
 }
 

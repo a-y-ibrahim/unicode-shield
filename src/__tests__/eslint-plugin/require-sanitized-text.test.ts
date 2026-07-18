@@ -327,6 +327,31 @@ ruleTester.run('require-sanitized-text', rule, {
       errors: [{messageId: 'requireSanitize', data: {name: 'username'}}],
     },
     {
+      // An *aliased* import of a different export, renamed to the target
+      // local name, is the same collision one level subtler: `scan` (which
+      // returns a ScanResult, not a sanitized string) bound locally as
+      // `sanitize`. Matching on local name alone would treat this as
+      // already-imported and go silent while never actually sanitizing
+      // anything; the imported (exported) name must match too.
+      code: "import {scan as sanitize} from 'unicode-shield'\nconst el = <div>{username}</div>",
+      output: null,
+      errors: [{messageId: 'requireSanitize', data: {name: 'username'}}],
+    },
+    {
+      // A script (CommonJS/non-module) file: inserting an ES `import` is
+      // itself a SyntaxError regardless of anything already in the file
+      // (`import`/`export` require sourceType 'module'), confirmed
+      // directly. No fix is offered.
+      code: 'const el = <div>{username}</div>',
+      languageOptions: {
+        ecmaVersion: 2022 as const,
+        sourceType: 'script' as const,
+        parserOptions: {ecmaFeatures: {jsx: true}},
+      },
+      output: null,
+      errors: [{messageId: 'requireSanitize', data: {name: 'username'}}],
+    },
+    {
       // autoImport.source containing a single quote must not break out of
       // the generated import's string literal.
       code: 'const el = <div>{username}</div>',
@@ -425,14 +450,19 @@ describe('require-sanitized-text --fix never writes unparseable output', () => {
     parserOptions: {ecmaFeatures: {jsx: true}},
   }
 
-  function fixWithRealLinter(code: string, options: Record<string, unknown> = {}) {
+  function fixWithRealLinter(
+    code: string,
+    options: Record<string, unknown> = {},
+    overrideLanguageOptions: Record<string, unknown> = {},
+  ) {
+    const merged = {...languageOptions, ...overrideLanguageOptions}
     const linter = new Linter()
     const {output} = linter.verifyAndFix(code, {
-      languageOptions,
+      languageOptions: merged,
       plugins: {custom: {rules: {'require-sanitized-text': rule}}},
       rules: {'custom/require-sanitized-text': ['error', options]},
     })
-    const reparsed = linter.verify(output ?? code, {languageOptions})
+    const reparsed = linter.verify(output ?? code, {languageOptions: merged})
     return {output, fatalErrors: reparsed.filter(message => message.fatal)}
   }
 
@@ -452,6 +482,20 @@ describe('require-sanitized-text --fix never writes unparseable output', () => {
   it('a reserved-word autoImport.name: leaves the file exactly as-is', () => {
     const code = 'const el = <div>{bio}</div>'
     const {output, fatalErrors} = fixWithRealLinter(code, {autoImport: {name: 'class', source: 'unicode-shield'}})
+    expect(fatalErrors).toEqual([])
+    expect(output).toBe(code)
+  })
+
+  it('an aliased import of a different export under the target name: leaves the file exactly as-is', () => {
+    const code = "import {scan as sanitize} from 'unicode-shield'\nconst el = <div>{bio}</div>"
+    const {output, fatalErrors} = fixWithRealLinter(code)
+    expect(fatalErrors).toEqual([])
+    expect(output).toBe(code)
+  })
+
+  it('a script (non-module) file with no existing import: leaves the file exactly as-is', () => {
+    const code = 'const el = <div>{bio}</div>'
+    const {output, fatalErrors} = fixWithRealLinter(code, {}, {sourceType: 'script'})
     expect(fatalErrors).toEqual([])
     expect(output).toBe(code)
   })
