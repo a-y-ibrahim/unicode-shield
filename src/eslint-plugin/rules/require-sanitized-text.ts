@@ -112,14 +112,30 @@ function matchesAny(name: string, candidates: string[]): boolean {
 }
 
 /**
+ * Optional chaining (`user?.bio`, `sanitize?.(x)`) wraps the whole chain in
+ * a ChainExpression one level above the Identifier/MemberExpression/
+ * CallExpression this rule actually looks for, so every shape check below
+ * unwraps through it first. Without this, `{user?.bio}` isn't recognized as
+ * risky at all (a real detection gap: optional chaining is exactly how
+ * these fields are commonly accessed, precisely because they're optional),
+ * and `const safe = sanitize?.(bio)` isn't recognized as already-sanitized
+ * either.
+ */
+function unwrapChainExpression(node: AstNode): AstNode {
+  return node.type === 'ChainExpression' && node.expression ? node.expression : node
+}
+
+/**
  * The risky name this expression would be reported under, or null if this
  * shape isn't one this rule analyzes. Only a bare identifier (`{username}`)
  * or a member access with a statically known property name (`{user.username}`
- * or `{user["username"]}`) are considered; anything else (a call, a template
- * literal, a computed access with a non-literal key) is left alone. This is
- * a one-hop naming heuristic, not real data-flow analysis.
+ * or `{user["username"]}`), optionally chained, are considered; anything
+ * else (a call, a template literal, a computed access with a non-literal
+ * key) is left alone. This is a one-hop naming heuristic, not real
+ * data-flow analysis.
  */
-function getRiskyName(node: AstNode, riskyNames: string[]): string | null {
+function getRiskyName(rawNode: AstNode, riskyNames: string[]): string | null {
+  const node = unwrapChainExpression(rawNode)
   if (node.type === 'Identifier') {
     const name = getIdentifierName(node)
     if (name !== null && matchesAny(name, riskyNames)) return name
@@ -133,8 +149,10 @@ function getRiskyName(node: AstNode, riskyNames: string[]): string | null {
   return null
 }
 
-function isSanitizerCall(node: AstNode | null | undefined, sanitizerNames: string[]): boolean {
-  if (!node || node.type !== 'CallExpression' || !node.callee) return false
+function isSanitizerCall(rawNode: AstNode | null | undefined, sanitizerNames: string[]): boolean {
+  if (!rawNode) return false
+  const node = unwrapChainExpression(rawNode)
+  if (node.type !== 'CallExpression' || !node.callee) return false
   const callee = node.callee
   if (callee.type === 'Identifier') {
     const name = getIdentifierName(callee)

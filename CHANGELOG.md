@@ -25,6 +25,19 @@ this project adheres to [Semantic Versioning](https://semver.org/).
   name declared inside the very function the flagged value is in (which
   would shadow a module-level import for that reference specifically); or
   if the file itself isn't a module (`import` doesn't work there at all).
+- `require-sanitized-text` now sees through optional chaining: `{user?.bio}`
+  and `alt={user?.bio}` are flagged and fixed the same as `{user.bio}`, and
+  an optionally-called sanitizer (`sanitize?.(bio)`) is recognized as
+  already-safe the same as a plain call. Previously the whole expression
+  went unanalyzed, exactly for fields that are optional-chained precisely
+  because they're optional.
+
+### Changed
+
+- Existing `require-sanitized-text` users may see new warnings on
+  optionally-chained access to a risky name (`{user?.bio}`) that previously
+  passed silently, the same kind of previously-undetected gap closed for
+  JSX attributes in 0.4.0.
 
 ## [0.6.0] - 2026-07-18
 

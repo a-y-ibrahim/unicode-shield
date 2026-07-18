@@ -86,6 +86,12 @@ ruleTester.run('require-sanitized-text', rule, {
     // and as the sanitizer call itself.
     '<div>{sanitize(user["bio"])}</div>',
     'const sanitizedBio = obj["sanitize"](user.bio); const el = <div>{sanitizedBio}</div>',
+
+    // An optionally-chained sanitizer call is still recognized as one, both
+    // inline and traced back through a declaration; ChainExpression must be
+    // unwrapped the same way for isSanitizerCall as for getRiskyName below.
+    '<div>{sanitize?.(username)}</div>',
+    'const safeBio = sanitize?.(user?.bio); const el = <div>{safeBio}</div>',
   ],
   invalid: [
     {
@@ -151,6 +157,20 @@ ruleTester.run('require-sanitized-text', rule, {
       code: '<div>{user["username"]}</div>',
       output: "import {sanitize} from 'unicode-shield';\n\n<div>{sanitize(user[\"username\"])}</div>",
       errors: [{messageId: 'requireSanitize', data: {name: 'username'}}],
+    },
+    {
+      // Optional chaining must not be a way to slip past the rule either:
+      // it's precisely how an optional field like bio is commonly
+      // accessed. The whole chain, `?.` included, is what gets wrapped.
+      code: '<div>{user?.bio}</div>',
+      output: "import {sanitize} from 'unicode-shield';\n\n<div>{sanitize(user?.bio)}</div>",
+      errors: [{messageId: 'requireSanitize', data: {name: 'bio'}}],
+    },
+    {
+      // Same, in an attribute position.
+      code: '<img alt={user?.bio} />',
+      output: "import {sanitize} from 'unicode-shield';\n\n<img alt={sanitize(user?.bio)} />",
+      errors: [{messageId: 'requireSanitizeAttribute', data: {name: 'bio', attribute: 'alt'}}],
     },
     {
       code: '<img alt={user.bio} />',

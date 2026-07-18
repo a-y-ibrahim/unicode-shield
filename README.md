@@ -184,11 +184,12 @@ const safeName = sanitize(user.displayName)
 
 Flags a JSX child expression, or the value of a text-rendering JSX
 attribute, when it's a bare identifier or a property access with a
-statically known name, dot or bracket notation alike (`{username}`,
-`{user.bio}`, `{user["bio"]}`), whose name matches a configured list of
-identity-like names, unless it's wrapped in `sanitize(...)` right there, or
-traced back exactly one declaration to a local variable assigned from a
-`sanitize(...)` call.
+statically known name, dot, bracket, or optional-chaining notation alike
+(`{username}`, `{user.bio}`, `{user["bio"]}`, `{user?.bio}`), whose name
+matches a configured list of identity-like names, unless it's wrapped in
+`sanitize(...)` right there (an optionally-called `sanitize?.(...)` counts
+too), or traced back exactly one declaration to a local variable assigned
+from a `sanitize(...)` call.
 
 | Option | Default | |
 | --- | --- | --- |
