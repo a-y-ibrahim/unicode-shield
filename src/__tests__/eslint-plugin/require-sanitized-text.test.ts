@@ -1,7 +1,15 @@
 import {Linter, RuleTester} from 'eslint'
+import tsParser from '@typescript-eslint/parser'
 import {describe, expect, it} from 'vitest'
 
 import rule from '../../eslint-plugin/rules/require-sanitized-text'
+
+const typescriptLanguageOptions = {
+  ecmaVersion: 2022 as const,
+  sourceType: 'module' as const,
+  parser: tsParser,
+  parserOptions: {ecmaFeatures: {jsx: true}},
+}
 
 // eslint's RuleTester defaults to a Mocha-style global describe/it. This is
 // the documented way to point it at any other test runner instead.
@@ -269,6 +277,44 @@ ruleTester.run('require-sanitized-text', rule, {
       output: "import {cleanText} from '~/utils/text';\n\nconst el = <div>{cleanText(username)}</div>",
       errors: [{messageId: 'requireSanitize', data: {name: 'username'}}],
     },
+    {
+      // A misconfigured autoImport.name that isn't a valid identifier (a
+      // package-style dash, here) can't be spliced into generated code
+      // safely, so the fix is withheld entirely rather than emitting
+      // invalid JS. The violation is still reported.
+      code: 'const el = <div>{username}</div>',
+      options: [{autoImport: {name: 'sanitize-text', source: 'unicode-shield'}}],
+      output: null,
+      errors: [{messageId: 'requireSanitize', data: {name: 'username'}}],
+    },
+    {
+      // autoImport.source containing a single quote must not break out of
+      // the generated import's string literal.
+      code: 'const el = <div>{username}</div>',
+      options: [{autoImport: {name: 'sanitize', source: "weird's-package"}}],
+      output: "import {sanitize} from 'weird\\'s-package';\n\nconst el = <div>{sanitize(username)}</div>",
+      errors: [{messageId: 'requireSanitize', data: {name: 'username'}}],
+    },
+    {
+      // A `import type {...}` from unicode-shield binds no runtime value
+      // (TypeScript erases it), so it must never be treated as a merge
+      // target: a real, separate value import is inserted instead.
+      code: "import type {ScanResult} from 'unicode-shield'\nconst el = <div>{username}</div>",
+      languageOptions: typescriptLanguageOptions,
+      output:
+        "import type {ScanResult} from 'unicode-shield'\nimport {sanitize} from 'unicode-shield';\nconst el = <div>{sanitize(username)}</div>",
+      errors: [{messageId: 'requireSanitize', data: {name: 'username'}}],
+    },
+    {
+      // Same idea per-specifier: `type Foo` inside an otherwise-normal value
+      // import binds no runtime value either, so it doesn't count as
+      // sanitize already being imported, and isn't a valid merge target.
+      code: "import {type Foo, scan} from 'unicode-shield'\nconst el = <div>{username}</div>",
+      languageOptions: typescriptLanguageOptions,
+      output:
+        "import {type Foo, scan, sanitize} from 'unicode-shield'\nconst el = <div>{sanitize(username)}</div>",
+      errors: [{messageId: 'requireSanitize', data: {name: 'username'}}],
+    },
   ],
 })
 
@@ -299,5 +345,28 @@ describe('require-sanitized-text --fix, multi-pass convergence', () => {
       "import {sanitize} from 'unicode-shield';\n\n<img alt={sanitize(user.bio)} title={sanitize(user.displayName)} />",
     )
     expect(messages).toEqual([])
+  })
+
+  it('still converges with three violations sharing one import, not two', () => {
+    const linter = new Linter()
+    const {output, messages} = linter.verifyAndFix(
+      '<img alt={user.bio} title={user.displayName} aria-label={user.nickname} />',
+      {
+        languageOptions: {
+          ecmaVersion: 2022,
+          sourceType: 'module',
+          parserOptions: {ecmaFeatures: {jsx: true}},
+        },
+        plugins: {custom: {rules: {'require-sanitized-text': rule}}},
+        rules: {'custom/require-sanitized-text': 'error'},
+      },
+    )
+
+    expect(output).toBe(
+      "import {sanitize} from 'unicode-shield';\n\n" +
+        '<img alt={sanitize(user.bio)} title={sanitize(user.displayName)} aria-label={sanitize(user.nickname)} />',
+    )
+    expect(messages).toEqual([])
+    expect(output?.match(/^import/gm)).toHaveLength(1)
   })
 })

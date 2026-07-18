@@ -15,7 +15,10 @@ this project adheres to [Semantic Versioning](https://semver.org/).
   already present. A new `autoImport` option controls what's wrapped/imported
   (or disables the fix entirely with `autoImport: false`), for projects that
   sanitize through their own wrapper instead of calling this package's
-  `sanitize()` directly.
+  `sanitize()` directly. Correctly treats a TypeScript `import type` (or a
+  per-specifier `import {type x}`) as binding no runtime value, so it's
+  never mistaken for an existing sanitize import; withholds the fix rather
+  than emitting broken code if `autoImport.name` isn't a valid identifier.
 
 ## [0.6.0] - 2026-07-18
 

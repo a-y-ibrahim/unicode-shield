@@ -30,6 +30,7 @@ interface AstNode {
   specifiers?: AstNode[]
   source?: AstNode
   local?: AstNode
+  importKind?: string
 }
 
 /** An Identifier node's own name, narrowed from the shared `string |
@@ -190,16 +191,20 @@ function getCheckedPosition(node: AstNode, riskyAttributes: string[]): CheckedPo
 /**
  * What the fixer needs to do to bring autoImport's name into scope, decided
  * once per fix from the Program's own top-level imports:
- * - already-imported: some `import {name} from source` already binds it
- *   under that exact local name; the fixer only needs to wrap the value.
- * - add-specifier: an import from `source` exists and already has a named
- *   ({...}) block, just missing this one name; append it there instead of
- *   creating a second import statement from the same source.
- * - add-declaration: no usable import from `source` exists yet (or the only
- *   one found is default/namespace-only, which isn't rewritten, that's a
- *   rarer shape and safer left as a separate statement); insert a fresh
- *   `import {name} from 'source'`, after the last existing import if there
- *   is one, otherwise before the file's first statement.
+ * - already-imported: some `import {name} from source` already binds it as a
+ *   real value under that exact local name; the fixer only needs to wrap
+ *   the value.
+ * - add-specifier: an import from `source` exists, has a named ({...})
+ *   block, and isn't type-only; append the name there instead of creating a
+ *   second import statement from the same source.
+ * - add-declaration: no usable value import from `source` exists yet.
+ *   Covers no import at all, a default/namespace-only import (a rarer shape,
+ *   safer left as a separate statement than rewritten), and a `import type
+ *   {...}` or per-specifier `import {type name}` (TypeScript erases these at
+ *   compile time, so they bind no runtime value and adding to them would
+ *   produce a fix that silently doesn't work). Inserts a fresh `import
+ *   {name} from 'source'`, after the last existing import if there is one,
+ *   otherwise before the file's first statement.
  */
 type ImportFixPlan =
   | {kind: 'already-imported'}
@@ -214,9 +219,11 @@ function planSanitizerImportFix(program: AstNode, autoImport: AutoImportConfig):
   for (const statement of body) {
     if (statement.type !== 'ImportDeclaration') continue
     lastImportDeclaration = statement
-    if (statement.source?.value !== autoImport.source) continue
+    if (statement.source?.value !== autoImport.source || statement.importKind === 'type') continue
 
-    const namedSpecifiers = (statement.specifiers ?? []).filter(specifier => specifier.type === 'ImportSpecifier')
+    const namedSpecifiers = (statement.specifiers ?? []).filter(
+      specifier => specifier.type === 'ImportSpecifier' && specifier.importKind !== 'type',
+    )
     const alreadyBound = namedSpecifiers.some(
       specifier => specifier.local != null && getIdentifierName(specifier.local) === autoImport.name,
     )
@@ -231,6 +238,33 @@ function planSanitizerImportFix(program: AstNode, autoImport: AutoImportConfig):
     return {kind: 'add-specifier', lastSpecifier: lastNamedSpecifierFromSource}
   }
   return {kind: 'add-declaration', afterImport: lastImportDeclaration, beforeStatement: body[0] ?? null}
+}
+
+const VALID_IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/
+
+/**
+ * Whether autoImport.name is safe to splice directly into generated code as
+ * a bare identifier (both the call `name(...)` and the import specifier
+ * `{name}`). Guards a config typo (a package-style `sanitize-text`, a
+ * leading digit, an empty string) from producing an autofix that inserts
+ * syntactically invalid JS; ESLint's own fix-validation would then reject
+ * the whole fix, so this just fails the same way earlier and more clearly.
+ */
+function isSafeIdentifier(name: string): boolean {
+  return VALID_IDENTIFIER.test(name)
+}
+
+/**
+ * A single-quoted JS string literal for `value`, escaped by direct
+ * construction (backslash first, so it can't double-escape the characters
+ * the later replacements introduce) rather than by reusing
+ * JSON.stringify's double-quoted output, so the generated import's module
+ * specifier can't break out of its string even if it's an unusual one
+ * (containing a quote or backslash, e.g. a Windows path someone configured).
+ */
+function toSingleQuotedStringLiteral(value: string): string {
+  const escaped = value.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, '\\r')
+  return `'${escaped}'`
 }
 
 /**
@@ -262,7 +296,7 @@ function buildSanitizeFix(
     // JSX-leading line), acorn-jsx doesn't reliably insert a semicolon on
     // its own there, an unterminated-import parse error results otherwise
     // (confirmed directly against espree, not theoretical).
-    const importText = `import {${autoImport.name}} from '${autoImport.source}';`
+    const importText = `import {${autoImport.name}} from ${toSingleQuotedStringLiteral(autoImport.source)};`
     if (plan.afterImport) {
       fixes.push(fixer.insertTextAfter(plan.afterImport as unknown as Rule.Node, `\n${importText}`))
     } else if (plan.beforeStatement) {
@@ -318,7 +352,8 @@ const rule: Rule.RuleModule = {
     const riskyNames = options.riskyNames ?? DEFAULT_RISKY_NAMES
     const riskyAttributes = options.riskyAttributes ?? DEFAULT_RISKY_ATTRIBUTES
     const sanitizerNames = options.sanitizerNames ?? DEFAULT_SANITIZER_NAMES
-    const autoImport = options.autoImport === false ? null : (options.autoImport ?? DEFAULT_AUTO_IMPORT)
+    const configuredAutoImport = options.autoImport === false ? null : (options.autoImport ?? DEFAULT_AUTO_IMPORT)
+    const autoImport = configuredAutoImport && isSafeIdentifier(configuredAutoImport.name) ? configuredAutoImport : null
     const program = context.sourceCode.ast as unknown as AstNode
 
     return {

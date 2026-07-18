@@ -224,6 +224,15 @@ oversight:
 - The fix only wraps the flagged value and manages one import; it doesn't
   reformat the file, so run your own formatter afterward if the inserted
   import's style doesn't match the rest of the file.
+- The fix only inserts an ES `import`, and only when `autoImport.name` is a
+  valid identifier (an `autoImport` pointed at a CommonJS-only file, or a
+  typo'd name like `sanitize-text`, silently reports without a fix rather
+  than risking broken output; ESLint itself refuses to apply a fix that
+  fails to parse, so a mistake here is surfaced, never applied silently).
+- Correctly skips a TypeScript `import type {...}` (or a per-specifier
+  `import {type x}`) when deciding where to attach the import: those bind
+  no runtime value, so they're never treated as "already imported" or as a
+  merge target, a real value import is added instead.
 
 Requires `eslint >= 9`, declared as an optional peer dependency: the core
 `scan`/`sanitize`/`isSafe` API has no dependency on ESLint at all, only this
