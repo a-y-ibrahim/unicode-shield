@@ -195,6 +195,14 @@ traced back exactly one declaration to a local variable assigned from a
 | `riskyNames` | `['username', 'handle', 'displayname', 'nickname', 'bio']` | Case-insensitive substring match against the identifier or property name. Replaces the default list rather than extending it. |
 | `riskyAttributes` | `['alt', 'title', 'placeholder', 'aria-label', 'value']` | Exact, case-insensitive match against the JSX attribute name. Only these attributes are checked; anything else (`className`, `href`, `onClick`, ...) is never a text sink and is left alone. Replaces the default list rather than extending it. |
 | `sanitizerNames` | `['sanitize']` | Function names, bare or as a property (e.g. `unicodeShield.sanitize`), recognized as sanitizing their argument. |
+| `autoImport` | `{name: 'sanitize', source: 'unicode-shield'}` | What `--fix` wraps a violation in and imports it from, adding the import or merging into an existing one from the same source as needed. Set to `false` to report without offering a fix. |
+
+Supports `--fix`: wraps the flagged value in a call (`user.bio` becomes
+`sanitize(user.bio)`) and adds or reuses the import needed to make that call
+valid, so running `eslint --fix` (or a save-time autofix in an editor) closes
+most violations without hand-editing every call site. Point `autoImport` at
+your own wrapper (`{name: 'cleanText', source: '~/utils/text'}`) if your
+project doesn't sanitize by calling this package's `sanitize()` directly.
 
 **What this rule deliberately doesn't do**, v1 scope rather than an
 oversight:
@@ -213,6 +221,9 @@ oversight:
   `riskyNames`, or disable the line.
 - Only recognizes a `sanitize()` call (or a name added to `sanitizerNames`)
   as proof of safety, not an `isSafe()` guard.
+- The fix only wraps the flagged value and manages one import; it doesn't
+  reformat the file, so run your own formatter afterward if the inserted
+  import's style doesn't match the rest of the file.
 
 Requires `eslint >= 9`, declared as an optional peer dependency: the core
 `scan`/`sanitize`/`isSafe` API has no dependency on ESLint at all, only this

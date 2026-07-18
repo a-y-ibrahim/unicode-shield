@@ -4,6 +4,19 @@ All notable changes to this project are documented in this file. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `unicode-shield/eslint-plugin`'s `require-sanitized-text` rule now supports
+  `--fix`: it wraps the flagged value in a call (`user.bio` becomes
+  `sanitize(user.bio)`) and adds or reuses the import needed to make that
+  call valid, merging into an existing `unicode-shield` import if one is
+  already present. A new `autoImport` option controls what's wrapped/imported
+  (or disables the fix entirely with `autoImport: false`), for projects that
+  sanitize through their own wrapper instead of calling this package's
+  `sanitize()` directly.
+
 ## [0.6.0] - 2026-07-18
 
 ### Added
