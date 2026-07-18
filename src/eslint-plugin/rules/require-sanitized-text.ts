@@ -192,33 +192,40 @@ function getCheckedPosition(node: AstNode, riskyAttributes: string[]): CheckedPo
 
 /**
  * What the fixer needs to do to bring autoImport's name into scope, decided
- * once per fix:
- * - already-imported: a module-scope binding named autoImport.name already
- *   exists, and it's exactly the thing we'd otherwise import: a named (not
- *   default/namespace), non-type-only specifier importing exactly
- *   autoImport.name (not some other export aliased to this local name,
- *   `import {scan as sanitize}` doesn't count) from exactly
+ * once per fix by walking the scope chain from the flagged expression's own
+ * scope upward (not just checking module scope): a nearer function or block
+ * scope can shadow autoImport.name with something unrelated (`var sanitize
+ * = 5` inside the very function the violation is in), and JS lexical
+ * scoping means that shadow, not a module-level import, is what a call at
+ * that spot would actually run.
+ * - already-imported: the nearest enclosing binding named autoImport.name
+ *   is at module scope, and it's exactly the thing we'd otherwise import: a
+ *   named (not default/namespace), non-type-only specifier importing
+ *   exactly autoImport.name (not some other export aliased to this local
+ *   name, `import {scan as sanitize}` doesn't count) from exactly
  *   autoImport.source. The fixer only needs to wrap the value.
- * - unsafe: either a module-scope binding named autoImport.name already
- *   exists but isn't the exact thing above (a different import, a local
- *   const/function/class, a default/namespace import, a type-only one, or
- *   an aliased import of an unrelated export), or there's no such binding
- *   but the file's sourceType isn't 'module' (inserting an ES `import`
- *   there is itself a SyntaxError). Either way this is a real, confirmed
- *   way to produce unparseable or silently-wrong output: ESLint's own
- *   `--fix` has no safety net that rejects a fix producing broken output,
- *   it writes whatever `output` it computes, so no fix is offered here at
- *   all rather than risking either failure mode.
- * - add-specifier: no existing binding for autoImport.name at all, but an
+ * - unsafe: the nearest enclosing binding named autoImport.name is
+ *   anything else, at module scope (a different import, a local
+ *   const/function/class, a default/namespace import, a type-only one, an
+ *   aliased import of an unrelated export) or at any nearer scope at all
+ *   (any binding there shadows a module-level import for every reference
+ *   inside it); or there's no such binding anywhere but the file's
+ *   sourceType isn't 'module' (inserting an ES `import` there is itself a
+ *   SyntaxError). Every one of these is a real, confirmed way to produce
+ *   unparseable or silently-wrong output: ESLint's own `--fix` has no
+ *   safety net that rejects a fix producing broken output, it writes
+ *   whatever `output` it computes, so no fix is offered here at all rather
+ *   than risking any of these failure modes.
+ * - add-specifier: no existing binding for autoImport.name anywhere, but an
  *   import from `source` exists with a named ({...}) block that isn't
  *   type-only; append the name there instead of creating a second import
  *   statement from the same source.
- * - add-declaration: no existing binding for autoImport.name, no usable
- *   value import from `source` to extend either (covers no import at all,
- *   a default/namespace-only import, and a type-only one), and the file's
- *   sourceType is 'module'. Inserts a fresh `import {name} from 'source'`,
- *   after the last existing import if there is one, otherwise before the
- *   file's first statement.
+ * - add-declaration: no existing binding for autoImport.name anywhere, no
+ *   usable value import from `source` to extend either (covers no import
+ *   at all, a default/namespace-only import, and a type-only one), and the
+ *   file's sourceType is 'module'. Inserts a fresh `import {name} from
+ *   'source'`, after the last existing import if there is one, otherwise
+ *   before the file's first statement.
  */
 type ImportFixPlan =
   | {kind: 'already-imported'}
@@ -232,6 +239,13 @@ interface ScopeDefinition {
   parent?: AstNode | null
 }
 
+interface ScopeLike {
+  type: string
+  variables: Array<{name: string; defs: ScopeDefinition[]}>
+  upper: ScopeLike | null
+  childScopes: ScopeLike[]
+}
+
 function isSanitizerImportBinding(definition: ScopeDefinition, autoImport: AutoImportConfig): boolean {
   if (definition.type !== 'ImportBinding') return false
   const specifier = definition.node
@@ -241,14 +255,39 @@ function isSanitizerImportBinding(definition: ScopeDefinition, autoImport: AutoI
   return declaration != null && declaration.source?.value === autoImport.source && declaration.importKind !== 'type'
 }
 
-function planSanitizerImportFix(context: Rule.RuleContext, program: AstNode, autoImport: AutoImportConfig): ImportFixPlan {
-  const globalScope = context.sourceCode.getScope(program as unknown as Rule.Node)
-  const moduleScope = globalScope.childScopes.find(child => child.type === 'module') ?? globalScope
-  const existingBinding = moduleScope.variables.find(variable => variable.name === autoImport.name)
+/** The nearest enclosing binding named autoImport.name, walking up from
+ *  `startScope`, plus which scope it was found in (module scope is where a
+ *  real import can live; anywhere nearer is a shadow). Null if nothing
+ *  binds that name all the way up through module scope. */
+function findEnclosingBinding(
+  startScope: ScopeLike,
+  name: string,
+): {scope: ScopeLike; variable: {defs: ScopeDefinition[]}} | null {
+  let scope: ScopeLike | null = startScope
+  while (scope) {
+    const variable = scope.variables.find(candidate => candidate.name === name)
+    if (variable) return {scope, variable}
+    if (scope.type === 'module') return null
+    scope = scope.upper
+  }
+  return null
+}
 
-  if (existingBinding) {
-    const isExactSanitizerImport = existingBinding.defs.some(definition =>
-      isSanitizerImportBinding(definition as unknown as ScopeDefinition, autoImport),
+function planSanitizerImportFix(
+  context: Rule.RuleContext,
+  program: AstNode,
+  expression: AstNode,
+  autoImport: AutoImportConfig,
+): ImportFixPlan {
+  const globalScope = context.sourceCode.getScope(program as unknown as Rule.Node) as unknown as ScopeLike
+  const moduleScope = globalScope.childScopes.find(child => child.type === 'module') ?? globalScope
+  const expressionScope = context.sourceCode.getScope(expression as unknown as Rule.Node) as unknown as ScopeLike
+  const enclosing = findEnclosingBinding(expressionScope, autoImport.name)
+
+  if (enclosing) {
+    if (enclosing.scope !== moduleScope) return {kind: 'unsafe'}
+    const isExactSanitizerImport = enclosing.variable.defs.some(definition =>
+      isSanitizerImportBinding(definition, autoImport),
     )
     return isExactSanitizerImport ? {kind: 'already-imported'} : {kind: 'unsafe'}
   }
@@ -443,7 +482,7 @@ const rule: Rule.RuleModule = {
                 context,
                 fixer,
                 expression,
-                planSanitizerImportFix(context, program, autoImport),
+                planSanitizerImportFix(context, program, expression, autoImport),
                 autoImport,
               )
           : undefined

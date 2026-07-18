@@ -231,13 +231,16 @@ oversight:
   otherwise corrupt a file, or silently sanitize nothing, itself, before
   ever offering one: `autoImport.name` must be a valid, non-reserved
   identifier (a typo like `sanitize-text`, or a name like `class`, reports
-  without a fix instead); it must not already be bound to something
-  unrelated in the file (a different import, a local variable or function
-  under that name, an aliased import of a *different* export renamed to
-  this local name, ...; reports without a fix instead of colliding with it
-  or silently calling the wrong thing); and the file itself must actually
-  support `import` syntax (reports without a fix in a script/CommonJS file
-  instead of inserting one anyway).
+  without a fix instead); nothing nearer than a module-level import may
+  already bind that name (a different import, a local variable or
+  function under that name, an aliased import of a *different* export
+  renamed to this local name, or even the same names but declared inside
+  the very function the flagged value is in, which would shadow a
+  module-level import for that reference specifically; reports without a
+  fix instead of colliding with it or silently calling the wrong thing);
+  and the file itself must actually support `import` syntax (reports
+  without a fix in a script/CommonJS file instead of inserting one
+  anyway).
 - Correctly skips a TypeScript `import type {...}` (or a per-specifier
   `import {type x}`) when deciding whether `autoImport.name` is already
   imported or a merge target: those bind no runtime value, so relying on

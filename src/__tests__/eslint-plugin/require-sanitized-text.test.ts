@@ -352,6 +352,17 @@ ruleTester.run('require-sanitized-text', rule, {
       errors: [{messageId: 'requireSanitize', data: {name: 'username'}}],
     },
     {
+      // A local variable shadowing autoImport.name inside the very function
+      // the violation is in. Checking only module scope would miss this: a
+      // top-level import wrapped around the value would still resolve to
+      // this nearer `var sanitize = 5` at runtime (normal JS lexical
+      // scoping), turning `sanitize(username)` into `5(username)`, a
+      // guaranteed TypeError whenever this component renders.
+      code: 'function Component() { var sanitize = 5; return <div>{username}</div> }',
+      output: null,
+      errors: [{messageId: 'requireSanitize', data: {name: 'username'}}],
+    },
+    {
       // autoImport.source containing a single quote must not break out of
       // the generated import's string literal.
       code: 'const el = <div>{username}</div>',
@@ -496,6 +507,28 @@ describe('require-sanitized-text --fix never writes unparseable output', () => {
   it('a script (non-module) file with no existing import: leaves the file exactly as-is', () => {
     const code = 'const el = <div>{bio}</div>'
     const {output, fatalErrors} = fixWithRealLinter(code, {}, {sourceType: 'script'})
+    expect(fatalErrors).toEqual([])
+    expect(output).toBe(code)
+  })
+
+  it('a local variable shadowing autoImport.name: leaves the file exactly as-is', () => {
+    // Parses fine either way, so the reparse check alone can't catch this
+    // one; what matters is that the fix isn't applied at all, since a
+    // module-level import would be shadowed by the local `var sanitize`
+    // for every reference inside this function, silently turning the
+    // sanitizer call into `5(bio)` at runtime.
+    const code = 'function Component() { var sanitize = 5; return <div>{bio}</div> }'
+    const {output, fatalErrors} = fixWithRealLinter(code)
+    expect(fatalErrors).toEqual([])
+    expect(output).toBe(code)
+  })
+
+  it('a block-scoped let shadowing autoImport.name in an enclosing if: leaves the file exactly as-is', () => {
+    // The same hazard one scope level removed: shadowing isn't limited to
+    // the immediately enclosing function, any scope between the violation
+    // and module scope counts, including a plain `{ }` block's own let/const.
+    const code = 'function Component() { if (cond) { let sanitize = 5; return <div>{bio}</div> } }'
+    const {output, fatalErrors} = fixWithRealLinter(code)
     expect(fatalErrors).toEqual([])
     expect(output).toBe(code)
   })

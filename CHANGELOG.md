@@ -21,8 +21,10 @@ this project adheres to [Semantic Versioning](https://semver.org/).
   rather than risking broken output or silently sanitizing nothing, if
   `autoImport.name` isn't a valid, non-reserved identifier; if it's
   already bound to something unrelated in the file, including an aliased
-  import of a *different* export renamed to that local name; or if the
-  file itself isn't a module (`import` doesn't work there at all).
+  import of a *different* export renamed to that local name, or the same
+  name declared inside the very function the flagged value is in (which
+  would shadow a module-level import for that reference specifically); or
+  if the file itself isn't a module (`import` doesn't work there at all).
 
 ## [0.6.0] - 2026-07-18
 
