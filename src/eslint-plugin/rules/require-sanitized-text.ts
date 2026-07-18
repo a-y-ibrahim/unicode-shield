@@ -190,28 +190,61 @@ function getCheckedPosition(node: AstNode, riskyAttributes: string[]): CheckedPo
 
 /**
  * What the fixer needs to do to bring autoImport's name into scope, decided
- * once per fix from the Program's own top-level imports:
- * - already-imported: some `import {name} from source` already binds it as a
- *   real value under that exact local name; the fixer only needs to wrap
- *   the value.
- * - add-specifier: an import from `source` exists, has a named ({...})
- *   block, and isn't type-only; append the name there instead of creating a
- *   second import statement from the same source.
- * - add-declaration: no usable value import from `source` exists yet.
- *   Covers no import at all, a default/namespace-only import (a rarer shape,
- *   safer left as a separate statement than rewritten), and a `import type
- *   {...}` or per-specifier `import {type name}` (TypeScript erases these at
- *   compile time, so they bind no runtime value and adding to them would
- *   produce a fix that silently doesn't work). Inserts a fresh `import
- *   {name} from 'source'`, after the last existing import if there is one,
- *   otherwise before the file's first statement.
+ * once per fix:
+ * - already-imported: a module-scope binding named autoImport.name already
+ *   exists, and it's exactly the thing we'd otherwise import: a named (not
+ *   default/namespace), non-type-only specifier from exactly
+ *   autoImport.source. The fixer only needs to wrap the value.
+ * - unsafe: a module-scope binding named autoImport.name already exists,
+ *   but it's something else entirely, a different import, a local
+ *   const/function/class, a default/namespace import, or a type-only one.
+ *   Inserting another binding under that name would be a duplicate
+ *   declaration (a real SyntaxError, confirmed directly: ESLint's own
+ *   `--fix` has no safety net that rejects a fix producing unparseable
+ *   output, it writes whatever `output` it computes), and silently calling
+ *   whatever's already bound to that name could run something unrelated
+ *   instead of sanitizing anything. No fix is offered in this case.
+ * - add-specifier: no existing binding for autoImport.name at all, but an
+ *   import from `source` exists with a named ({...}) block that isn't
+ *   type-only; append the name there instead of creating a second import
+ *   statement from the same source.
+ * - add-declaration: no existing binding for autoImport.name, and no usable
+ *   value import from `source` to extend either (covers no import at all,
+ *   a default/namespace-only import, and a type-only one). Inserts a fresh
+ *   `import {name} from 'source'`, after the last existing import if there
+ *   is one, otherwise before the file's first statement.
  */
 type ImportFixPlan =
   | {kind: 'already-imported'}
+  | {kind: 'unsafe'}
   | {kind: 'add-specifier'; lastSpecifier: AstNode}
   | {kind: 'add-declaration'; afterImport: AstNode | null; beforeStatement: AstNode | null}
 
-function planSanitizerImportFix(program: AstNode, autoImport: AutoImportConfig): ImportFixPlan {
+interface ScopeDefinition {
+  type: string
+  node: AstNode
+  parent?: AstNode | null
+}
+
+function isSanitizerImportBinding(definition: ScopeDefinition, autoImport: AutoImportConfig): boolean {
+  if (definition.type !== 'ImportBinding') return false
+  if (definition.node.type !== 'ImportSpecifier' || definition.node.importKind === 'type') return false
+  const declaration = definition.parent
+  return declaration != null && declaration.source?.value === autoImport.source && declaration.importKind !== 'type'
+}
+
+function planSanitizerImportFix(context: Rule.RuleContext, program: AstNode, autoImport: AutoImportConfig): ImportFixPlan {
+  const globalScope = context.sourceCode.getScope(program as unknown as Rule.Node)
+  const moduleScope = globalScope.childScopes.find(child => child.type === 'module') ?? globalScope
+  const existingBinding = moduleScope.variables.find(variable => variable.name === autoImport.name)
+
+  if (existingBinding) {
+    const isExactSanitizerImport = existingBinding.defs.some(definition =>
+      isSanitizerImportBinding(definition as unknown as ScopeDefinition, autoImport),
+    )
+    return isExactSanitizerImport ? {kind: 'already-imported'} : {kind: 'unsafe'}
+  }
+
   const body = program.body ?? []
   let lastImportDeclaration: AstNode | null = null
   let lastNamedSpecifierFromSource: AstNode | null = null
@@ -224,11 +257,6 @@ function planSanitizerImportFix(program: AstNode, autoImport: AutoImportConfig):
     const namedSpecifiers = (statement.specifiers ?? []).filter(
       specifier => specifier.type === 'ImportSpecifier' && specifier.importKind !== 'type',
     )
-    const alreadyBound = namedSpecifiers.some(
-      specifier => specifier.local != null && getIdentifierName(specifier.local) === autoImport.name,
-    )
-    if (alreadyBound) return {kind: 'already-imported'}
-
     if (namedSpecifiers.length > 0) {
       lastNamedSpecifierFromSource = namedSpecifiers[namedSpecifiers.length - 1] ?? null
     }
@@ -242,16 +270,35 @@ function planSanitizerImportFix(program: AstNode, autoImport: AutoImportConfig):
 
 const VALID_IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/
 
+// Every ES2015+ reserved word and literal keyword: none of these can be used
+// as a plain identifier (an import specifier's local name, or a call
+// callee) in a module, which is always strict mode. `arguments` and `eval`
+// are deliberately included too: not reserved words technically, but
+// strict mode (which a module always is) forbids binding either as an
+// import/const-like name, confirmed directly rather than assumed.
+const RESERVED_WORDS = new Set([
+  'arguments', 'await', 'break', 'case', 'catch', 'class', 'const', 'continue',
+  'debugger', 'default', 'delete', 'do', 'else', 'enum', 'eval', 'export',
+  'extends', 'false', 'finally', 'for', 'function', 'if', 'implements',
+  'import', 'in', 'instanceof', 'interface', 'let', 'new', 'null', 'package',
+  'private', 'protected', 'public', 'return', 'static', 'super', 'switch',
+  'this', 'throw', 'true', 'try', 'typeof', 'var', 'void', 'while', 'with',
+  'yield',
+])
+
 /**
  * Whether autoImport.name is safe to splice directly into generated code as
  * a bare identifier (both the call `name(...)` and the import specifier
  * `{name}`). Guards a config typo (a package-style `sanitize-text`, a
- * leading digit, an empty string) from producing an autofix that inserts
- * syntactically invalid JS; ESLint's own fix-validation would then reject
- * the whole fix, so this just fails the same way earlier and more clearly.
+ * leading digit, an empty string, a reserved word) from producing an
+ * autofix that inserts syntactically invalid JS. This matters because
+ * nothing downstream catches it: ESLint's own `--fix` writes whatever
+ * `output` it computes with no check that it still parses (confirmed
+ * directly against `ESLint.outputFixes`, not assumed), so this check is the
+ * only thing standing between a bad config value and a corrupted file.
  */
 function isSafeIdentifier(name: string): boolean {
-  return VALID_IDENTIFIER.test(name)
+  return VALID_IDENTIFIER.test(name) && !RESERVED_WORDS.has(name)
 }
 
 /**
@@ -275,6 +322,8 @@ function toSingleQuotedStringLiteral(value: string): string {
  * insertion point) and only one wins per pass, the other converges on
  * ESLint's next pass once the import already exists. That's standard
  * multi-pass --fix behavior, not something this rule needs to work around.
+ * Returns null for `unsafe`: no fix at all is safer than one that collides
+ * with an existing, unrelated binding of the same name.
  */
 function buildSanitizeFix(
   context: Rule.RuleContext,
@@ -282,7 +331,9 @@ function buildSanitizeFix(
   expression: AstNode,
   plan: ImportFixPlan,
   autoImport: AutoImportConfig,
-): Rule.Fix[] {
+): Rule.Fix[] | null {
+  if (plan.kind === 'unsafe') return null
+
   const expressionNode = expression as unknown as Rule.Node
   const expressionText = context.sourceCode.getText(expressionNode)
   const fixes = [fixer.replaceText(expressionNode, `${autoImport.name}(${expressionText})`)]
@@ -374,7 +425,13 @@ const rule: Rule.RuleModule = {
 
         const fix = autoImport
           ? (fixer: Rule.RuleFixer) =>
-              buildSanitizeFix(context, fixer, expression, planSanitizerImportFix(program, autoImport), autoImport)
+              buildSanitizeFix(
+                context,
+                fixer,
+                expression,
+                planSanitizerImportFix(context, program, autoImport),
+                autoImport,
+              )
           : undefined
 
         if (position.kind === 'attribute') {

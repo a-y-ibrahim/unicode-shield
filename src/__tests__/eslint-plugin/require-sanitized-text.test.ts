@@ -288,6 +288,45 @@ ruleTester.run('require-sanitized-text', rule, {
       errors: [{messageId: 'requireSanitize', data: {name: 'username'}}],
     },
     {
+      // A reserved word is shaped like an identifier (passes a naive regex)
+      // but can't actually be used as one: `class(username)` and
+      // `import {class}` are both syntax errors. Must be rejected too.
+      code: 'const el = <div>{username}</div>',
+      options: [{autoImport: {name: 'class', source: 'unicode-shield'}}],
+      output: null,
+      errors: [{messageId: 'requireSanitize', data: {name: 'username'}}],
+    },
+    {
+      // autoImport.name already bound, but by an import from a different
+      // source entirely: inserting another `sanitize` binding would be a
+      // duplicate declaration (a real SyntaxError), and the existing one
+      // isn't the real sanitize() at all. No fix is offered.
+      code: "import {sanitize} from './legacy-sanitizer'\nconst el = <div>{username}</div>",
+      output: null,
+      errors: [{messageId: 'requireSanitize', data: {name: 'username'}}],
+    },
+    {
+      // Same hazard, a plain local declaration instead of an import.
+      code: 'const sanitize = 5\nconst el = <div>{username}</div>',
+      output: null,
+      errors: [{messageId: 'requireSanitize', data: {name: 'username'}}],
+    },
+    {
+      // Same hazard, a local function declaration.
+      code: 'function sanitize(x) { return x }\nconst el = <div>{username}</div>',
+      output: null,
+      errors: [{messageId: 'requireSanitize', data: {name: 'username'}}],
+    },
+    {
+      // A *default* import from the right source, under the target name,
+      // is still a collision, not a match: unicode-shield has no default
+      // export, so `import sanitize from 'unicode-shield'` isn't the real
+      // sanitize() either, it's just a name that happens to line up.
+      code: "import sanitize from 'unicode-shield'\nconst el = <div>{username}</div>",
+      output: null,
+      errors: [{messageId: 'requireSanitize', data: {name: 'username'}}],
+    },
+    {
       // autoImport.source containing a single quote must not break out of
       // the generated import's string literal.
       code: 'const el = <div>{username}</div>',
@@ -368,5 +407,52 @@ describe('require-sanitized-text --fix, multi-pass convergence', () => {
     )
     expect(messages).toEqual([])
     expect(output?.match(/^import/gm)).toHaveLength(1)
+  })
+})
+
+describe('require-sanitized-text --fix never writes unparseable output', () => {
+  // RuleTester's `output: null` only proves *this rule* didn't return a fix
+  // object. It doesn't prove the file stays valid, ESLint's own --fix has no
+  // safety net: `ESLint.outputFixes()` writes `result.output` to disk
+  // whenever it's a string, with no check that it still parses (read
+  // directly from node_modules/eslint/lib/eslint/eslint.js). So this drives
+  // the real Linter end to end and asserts the *reparsed* output has no
+  // fatal error, the only thing that actually matters for "did this corrupt
+  // the user's file".
+  const languageOptions = {
+    ecmaVersion: 2022 as const,
+    sourceType: 'module' as const,
+    parserOptions: {ecmaFeatures: {jsx: true}},
+  }
+
+  function fixWithRealLinter(code: string, options: Record<string, unknown> = {}) {
+    const linter = new Linter()
+    const {output} = linter.verifyAndFix(code, {
+      languageOptions,
+      plugins: {custom: {rules: {'require-sanitized-text': rule}}},
+      rules: {'custom/require-sanitized-text': ['error', options]},
+    })
+    const reparsed = linter.verify(output ?? code, {languageOptions})
+    return {output, fatalErrors: reparsed.filter(message => message.fatal)}
+  }
+
+  const collisionScenarios: Array<[string, string]> = [
+    ['import from an unrelated source under the same name', "import {sanitize} from './legacy'\nconst el = <div>{bio}</div>"],
+    ['a local const under the same name', 'const sanitize = 5\nconst el = <div>{bio}</div>'],
+    ['a local function under the same name', 'function sanitize(x) { return x }\nconst el = <div>{bio}</div>'],
+    ['a default import from the right source under the same name', "import sanitize from 'unicode-shield'\nconst el = <div>{bio}</div>"],
+  ]
+
+  it.each(collisionScenarios)('%s: leaves the file exactly as-is', (_label, code) => {
+    const {output, fatalErrors} = fixWithRealLinter(code)
+    expect(fatalErrors).toEqual([])
+    expect(output).toBe(code)
+  })
+
+  it('a reserved-word autoImport.name: leaves the file exactly as-is', () => {
+    const code = 'const el = <div>{bio}</div>'
+    const {output, fatalErrors} = fixWithRealLinter(code, {autoImport: {name: 'class', source: 'unicode-shield'}})
+    expect(fatalErrors).toEqual([])
+    expect(output).toBe(code)
   })
 })

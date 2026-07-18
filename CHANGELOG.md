@@ -17,8 +17,10 @@ this project adheres to [Semantic Versioning](https://semver.org/).
   sanitize through their own wrapper instead of calling this package's
   `sanitize()` directly. Correctly treats a TypeScript `import type` (or a
   per-specifier `import {type x}`) as binding no runtime value, so it's
-  never mistaken for an existing sanitize import; withholds the fix rather
-  than emitting broken code if `autoImport.name` isn't a valid identifier.
+  never mistaken for an existing sanitize import. Withholds the fix,
+  rather than emitting broken code, if `autoImport.name` isn't a valid,
+  non-reserved identifier, or is already bound to something unrelated in
+  the file.
 
 ## [0.6.0] - 2026-07-18
 
