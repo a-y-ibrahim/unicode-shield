@@ -15,9 +15,12 @@ this project adheres to [Semantic Versioning](https://semver.org/).
   and exposes `safe`/`threat-count` outputs. `path` and `version` are both
   validated against a narrow, allowlisted character set before running
   anything, deliberately narrower than either could technically support
-  (no spaces in `path`, no boolean/comparison version ranges), since both
-  get passed through a shell to work around a Windows-specific quirk in
-  how `npx` itself has to be invoked there, and that's what keeps it safe.
+  (no spaces in `path`, no leading `-` in `path`, no `^`/boolean/comparison
+  version ranges), since both get passed through a shell to work around a
+  Windows-specific quirk in how `npx` itself has to be invoked there, and
+  that's what keeps it safe. `^` specifically is excluded because cmd.exe
+  silently consumes it as its own escape character before `npx` ever sees
+  it, confirmed directly, not just disallowed out of caution.
   See the README's GitHub Action section for full usage.
 
 ## [0.7.0] - 2026-07-19

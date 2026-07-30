@@ -97,7 +97,7 @@ const NPX_COMMAND = process.platform === 'win32' ? 'npx.cmd' : 'npx'
 // first, which is what the two functions below do.
 //
 // Both are strict ALLOWLISTS, not denylists, and neither allows |, <, >,
-// or space. An earlier version of this file denylisted only the
+// ^, or space. An earlier version of this file denylisted only the
 // "obviously dangerous" characters and allowed |/</> in `version` on the
 // reasoning that real npm ranges legitimately use them (`1.x || 2.x`,
 // `>=1.0.0 <2.0.0`). That reasoning was wrong: cmd.exe treats |, &, <, >,
@@ -106,20 +106,38 @@ const NPX_COMMAND = process.platform === 'win32' ? 'npx.cmd' : 'npx'
 // recognition), so any argument containing them is exploitable through
 // `shell: true` regardless of surrounding quotes, confirmed directly by
 // executing a crafted `version` value that wrote an attacker-chosen file
-// to disk. There is no way to keep supporting boolean/comparison version
-// ranges here without either hand-rolling cmd.exe's caret-escaping rules
-// (its own documented edge cases, e.g. around trailing backslashes before
-// a quote, make that easy to get subtly wrong) or adding a dependency
-// purely to run one subprocess; narrowing the allowlist instead, and
-// accepting that `version` is a plain version or a simple ^/~ range, not
-// a full boolean range, is the trade-off made here.
-const SAFE_VERSION = /^[\w.^~+-]+$/
+// to disk. `^` itself was allowed for a while after that fix, on the
+// (untested) assumption it'd survive as a literal since it never merges
+// arguments or resurrects another operator; a later, real end-to-end run
+// (dumping the argv the stubbed npx actually received, not just checking
+// the regex) showed cmd.exe consumes `^` as its own escape character
+// first and it never reaches npx at all: `^0.7.0` silently becomes
+// `0.7.0`, a materially different version, not an error. Not exploitable,
+// but not what it claimed to do either, so it's excluded rather than
+// documented as "works, but not on Windows". There is no way to keep
+// supporting caret/boolean/comparison version ranges here without either
+// hand-rolling cmd.exe's escaping rules (its own documented edge cases,
+// e.g. around trailing backslashes before a quote, make that easy to get
+// subtly wrong, exactly what happened with `^` itself) or adding a
+// dependency purely to run one subprocess; narrowing the allowlist
+// instead, and accepting that `version` is a plain version, a `~` range,
+// or a pre-release/build tag, not a caret or boolean range, is the
+// trade-off made here.
+const SAFE_VERSION = /^[\w.~+-]+$/
+
+// No leading `-`: unicode-shield's own CLI parses a leading-dash argument
+// as a flag (src/cli/args.ts), not a path, so `path: '--json'` would
+// reach `unicode-shield scan --json --json` and fail as a usage error
+// instead of scanning anything, confirmed directly against parseArgs.
+// Low severity (breaks the check, doesn't run anything unintended) but
+// cheap to rule out up front with a clearer error than the CLI's own.
 const SAFE_PATH = /^[\w./:-]+$/
+const STARTS_WITH_DASH = /^-/
 
 function assertSafeVersion(version) {
   if (!SAFE_VERSION.test(version)) {
     throw new Error(
-      `version must be a plain version or a simple ^/~ range (letters, digits, . ^ ~ + - only), got: ${JSON.stringify(version)}`,
+      `version must be a plain version, a ~ range, or a pre-release/build tag (letters, digits, . ~ + - only), got: ${JSON.stringify(version)}`,
     )
   }
 }
@@ -127,6 +145,9 @@ function assertSafeVersion(version) {
 function assertSafePath(path) {
   if (!SAFE_PATH.test(path)) {
     throw new Error(`path contains characters this action doesn't accept (letters, digits, . / : - only), got: ${JSON.stringify(path)}`)
+  }
+  if (STARTS_WITH_DASH.test(path)) {
+    throw new Error(`path must not start with '-', it would be parsed as a flag rather than a path, got: ${JSON.stringify(path)}`)
   }
 }
 

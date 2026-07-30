@@ -376,7 +376,7 @@ already looking, instead of buried in a log.
 | Input | Default | |
 | --- | --- | --- |
 | `path` | `.` | File or directory to scan. Letters, digits, `.`, `/`, `:`, and `-` only; see below. |
-| `version` | `latest` | `unicode-shield` version to run: a dist-tag (`latest`), a plain version (`0.7.0`), or a simple `^`/`~` range, not a boolean or comparison range; see below. |
+| `version` | `latest` | `unicode-shield` version to run: a dist-tag (`latest`), a plain version (`0.7.0`), or a `~` range, not a `^`, boolean, or comparison range; see below. |
 | `fail-on-threat` | `true` | Set to `false` to annotate findings without failing the job. |
 
 | Output | |
@@ -386,11 +386,15 @@ already looking, instead of buried in a log.
 
 `path` and `version` are both allowlisted to a narrow character set before
 this action ever runs a command with them, deliberately narrower than
-either could technically support (no spaces in `path`; no `OR` ranges like
-`1.x OR 2.x`, and no comparison ranges like `>=1.0.0` in `version`),
-because both get passed through a shell to work around a Windows-specific
-quirk in how `npx` itself is invoked, and validating strictly beforehand
-is what keeps that safe.
+either could technically support (no spaces in `path`; no `^` ranges, no
+`OR` ranges like `1.x OR 2.x`, and no comparison ranges like `>=1.0.0` in
+`version`), because both get passed through a shell to work around a
+Windows-specific quirk in how `npx` itself is invoked, and validating
+strictly beforehand is what keeps that safe. `^` specifically isn't just
+disallowed for safety: on Windows, cmd.exe silently consumes it as its own
+escape character before `npx` ever sees it, so `^0.7.0` would silently
+resolve to the exact version `0.7.0` instead, confirmed directly rather
+than assumed.
 
 Pin to a specific released tag rather than a branch, the same practice
 recommended for any third-party action.

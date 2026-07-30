@@ -303,9 +303,9 @@ describe('main', () => {
 
   it.each([
     ['a plain version', '0.7.0'],
-    ['a caret range', '^0.7.0'],
     ['a tilde range', '~0.7.0'],
     ['a pre-release tag', '0.7.0-beta.1'],
+    ['a build-metadata tag', '0.7.0+build.1'],
     ['the default', 'latest'],
   ])('accepts %s as a version', (_label, version) => {
     execFileSyncTrigger.impl = () => JSON.stringify({safe: true, filesScanned: 0, files: [], unreadableDirectories: []})
@@ -328,11 +328,26 @@ describe('main', () => {
     expect(process.exitCode).toBeUndefined()
   })
 
+  it('rejects a path starting with a dash instead of letting it be parsed as a CLI flag', () => {
+    execFileSyncTrigger.impl = () => {
+      throw new Error('should not have been called')
+    }
+
+    main({GITHUB_OUTPUT: outputFile, INPUT_PATH: '--json'})
+
+    expect(process.exitCode).toBe(1)
+    expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("path must not start with '-'"))
+  })
+
   it.each([
     ['a semicolon', 'latest; evil'],
     ['a pipe, the exact independent-review finding', `0.7.0|echo INJECTED>PIPE_INJECTION_MARKER.txt`],
     ['a boolean OR range (no longer supported, see the comment above SAFE_VERSION)', '1.x || 2.x'],
     ['a comparison range (same reason)', '>=1.0.0 <2.0.0'],
+    [
+      'a caret range (no longer supported: confirmed cmd.exe silently strips ^ rather than passing it through)',
+      '^0.7.0',
+    ],
     ['a backtick', 'latest`evil`'],
   ])('rejects a version containing %s instead of ever reaching the shell', (_label, version) => {
     execFileSyncTrigger.impl = () => {
@@ -343,7 +358,7 @@ describe('main', () => {
 
     expect(process.exitCode).toBe(1)
     expect(consoleLogSpy).toHaveBeenCalledWith(
-      expect.stringContaining("version must be a plain version or a simple"),
+      expect.stringContaining('version must be a plain version'),
     )
   })
 })

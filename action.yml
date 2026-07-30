@@ -12,7 +12,7 @@ inputs:
     required: false
     default: '.'
   version:
-    description: "unicode-shield version to run, as an npm version or tag (e.g. 'latest', '0.7.0', '^0.7.0')."
+    description: "unicode-shield version to run, as an npm version or tag (e.g. 'latest', '0.7.0', '~0.7.0')."
     required: false
     default: 'latest'
   fail-on-threat:
