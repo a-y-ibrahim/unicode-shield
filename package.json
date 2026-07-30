@@ -69,7 +69,9 @@
   },
   "homepage": "https://github.com/a-y-ibrahim/unicode-shield#readme",
   "overrides": {
-    "esbuild": ">=0.28.1"
+    "esbuild": ">=0.28.1",
+    "brace-expansion": ">=1.1.17",
+    "postcss": ">=8.5.18"
   },
   "peerDependencies": {
     "eslint": ">=9"
