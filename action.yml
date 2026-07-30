@@ -1,0 +1,47 @@
+name: 'unicode-shield scan'
+description: 'Scan files for dangerous Unicode (bidi spoofing, invisible characters, homoglyphs, Zalgo text) and annotate findings inline on the commit or pull request.'
+author: 'Abdelrahman Youssef'
+
+branding:
+  icon: 'shield'
+  color: 'purple'
+
+inputs:
+  path:
+    description: 'File or directory to scan.'
+    required: false
+    default: '.'
+  version:
+    description: "unicode-shield version to run, as an npm version or tag (e.g. 'latest', '0.7.0', '^0.7.0')."
+    required: false
+    default: 'latest'
+  fail-on-threat:
+    description: "Whether a dangerous threat fails this step. Set to 'false' to only annotate without failing the job."
+    required: false
+    default: 'true'
+
+outputs:
+  safe:
+    description: "'true' if no dangerous threats were found, 'false' otherwise."
+    value: ${{ steps.scan.outputs.safe }}
+  threat-count:
+    description: 'Total number of threats found (dangerous and informational).'
+    value: ${{ steps.scan.outputs['threat-count'] }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Scan for dangerous Unicode
+      id: scan
+      shell: bash
+      run: node "${{ github.action_path }}/action/annotate.mjs"
+      env:
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_VERSION: ${{ inputs.version }}
+        # Bracket, not dot, notation: GitHub Actions expression property
+        # dereference isn't documented as supporting hyphenated names
+        # reliably, and getting this wrong here is silent (the env var
+        # would just be empty, not an error), unlike a typo'd `inputs.path`
+        # which would at least be obviously wrong. Not worth the risk to
+        # save four characters.
+        INPUT_FAIL_ON_THREAT: ${{ inputs['fail-on-threat'] }}

@@ -4,6 +4,22 @@ All notable changes to this project are documented in this file. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- A GitHub Action (`uses: a-y-ibrahim/unicode-shield@vX.Y.Z`), wrapping the
+  CLI's `scan` command for CI: findings show up as inline `::error`/
+  `::warning` annotations on the commit or pull request instead of being
+  buried in a log. Takes `path`, `version`, and `fail-on-threat` inputs,
+  and exposes `safe`/`threat-count` outputs. `path` and `version` are both
+  validated against a narrow, allowlisted character set before running
+  anything, deliberately narrower than either could technically support
+  (no spaces in `path`, no boolean/comparison version ranges), since both
+  get passed through a shell to work around a Windows-specific quirk in
+  how `npx` itself has to be invoked there, and that's what keeps it safe.
+  See the README's GitHub Action section for full usage.
+
 ## [0.7.0] - 2026-07-19
 
 ### Added

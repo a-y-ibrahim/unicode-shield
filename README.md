@@ -360,6 +360,41 @@ Exit codes across all three commands: `0` clean, `1` a threat or
 confusable pair was found, `2` a usage or runtime error (bad arguments, a
 path that doesn't exist).
 
+## GitHub Action
+
+The CLI above wraps into a ready-made GitHub Action, so a repository can
+add Unicode scanning to CI with one step. Findings show up as inline
+annotations on the commit or pull request, right where a reviewer is
+already looking, instead of buried in a log.
+
+```yaml
+- uses: a-y-ibrahim/unicode-shield@v0.8.0
+  with:
+    path: src
+```
+
+| Input | Default | |
+| --- | --- | --- |
+| `path` | `.` | File or directory to scan. Letters, digits, `.`, `/`, `:`, and `-` only; see below. |
+| `version` | `latest` | `unicode-shield` version to run: a dist-tag (`latest`), a plain version (`0.7.0`), or a simple `^`/`~` range, not a boolean or comparison range; see below. |
+| `fail-on-threat` | `true` | Set to `false` to annotate findings without failing the job. |
+
+| Output | |
+| --- | --- |
+| `safe` | `'true'` if no dangerous threat was found, `'false'` otherwise. |
+| `threat-count` | Total number of threats found (dangerous and informational). |
+
+`path` and `version` are both allowlisted to a narrow character set before
+this action ever runs a command with them, deliberately narrower than
+either could technically support (no spaces in `path`; no `OR` ranges like
+`1.x OR 2.x`, and no comparison ranges like `>=1.0.0` in `version`),
+because both get passed through a shell to work around a Windows-specific
+quirk in how `npx` itself is invoked, and validating strictly beforehand
+is what keeps that safe.
+
+Pin to a specific released tag rather than a branch, the same practice
+recommended for any third-party action.
+
 ## What this is not
 
 This is not a source-code scanner or a profanity filter. Confusable and
