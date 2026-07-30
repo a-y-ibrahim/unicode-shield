@@ -1,5 +1,9 @@
 allowBuilds:
   esbuild: false
+# Lets the brace-expansion override below actually resolve to 1.1.17: pnpm's
+# default minimum-release-age gate otherwise silently keeps a recursive
+# update on the older, vulnerable 1.1.16 for a package this recently
+# published, with no warning that anything was held back.
 minimumReleaseAgeExclude:
   - brace-expansion@1.1.17
 overrides:
