@@ -340,6 +340,22 @@ describe('main', () => {
   })
 
   it.each([
+    ['a leading .. segment', '../../etc/passwd'],
+    ['a trailing .. segment', 'src/..'],
+    ['a .. segment in the middle', 'src/../../secrets'],
+    ['bare ..', '..'],
+  ])('rejects a path containing %s instead of letting it escape the intended directory', (_label, path) => {
+    execFileSyncTrigger.impl = () => {
+      throw new Error('should not have been called')
+    }
+
+    main({GITHUB_OUTPUT: outputFile, INPUT_PATH: path})
+
+    expect(process.exitCode).toBe(1)
+    expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("path must not contain a '..' segment"))
+  })
+
+  it.each([
     ['a semicolon', 'latest; evil'],
     ['a pipe, the exact independent-review finding', `0.7.0|echo INJECTED>PIPE_INJECTION_MARKER.txt`],
     ['a boolean OR range (no longer supported, see the comment above SAFE_VERSION)', '1.x || 2.x'],
@@ -360,5 +376,20 @@ describe('main', () => {
     expect(consoleLogSpy).toHaveBeenCalledWith(
       expect.stringContaining('version must be a plain version'),
     )
+  })
+
+  it.each([
+    ['a bare dot, the exact independent-review finding: npm resolves this as a local directory install', '.'],
+    ['a bare double dot', '..'],
+    ['a dot-prefixed value', '.foo'],
+  ])('rejects a version starting with %s instead of letting npm resolve it as a local directory', (_label, version) => {
+    execFileSyncTrigger.impl = () => {
+      throw new Error('should not have been called')
+    }
+
+    main({GITHUB_OUTPUT: outputFile, INPUT_VERSION: version})
+
+    expect(process.exitCode).toBe(1)
+    expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("version must not start with '.'"))
   })
 })

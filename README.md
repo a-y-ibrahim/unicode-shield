@@ -396,6 +396,18 @@ escape character before `npx` ever sees it, so `^0.7.0` would silently
 resolve to the exact version `0.7.0` instead, confirmed directly rather
 than assumed.
 
+`version` also can't start with `.`: npm resolves a spec like
+`unicode-shield@.` as a reference to a local directory rather than the
+registry, regardless of the package name written before the `@`, so a
+workflow that ever sources `version` from anything other than a fixed
+string could otherwise be tricked into running an arbitrary local package
+instead of the real one, confirmed directly by reproducing it. `path`
+can't contain a `..` segment for the same reason in the other direction:
+nothing about a same-repo scan target legitimately needs to walk outside
+the directory a workflow author intended to scan; an absolute or
+drive-letter path (`C:/repo/src`) still works, since that's the caller's
+own explicit choice.
+
 Pin to a specific released tag rather than a branch, the same practice
 recommended for any third-party action.
 

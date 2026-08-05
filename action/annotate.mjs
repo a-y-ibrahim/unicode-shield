@@ -125,6 +125,15 @@ const NPX_COMMAND = process.platform === 'win32' ? 'npx.cmd' : 'npx'
 // trade-off made here.
 const SAFE_VERSION = /^[\w.~+-]+$/
 
+// A version spec beginning with `.` (or `..`) is resolved by npm's own
+// package-arg parser as a local directory reference relative to the
+// current working directory, entirely independent of the package name
+// preceding the `@`, confirmed directly: `unicode-shield@.` runs whatever
+// package sits in the working directory instead of the real one. No plain
+// version, dist-tag, `~` range, or pre-release/build tag legitimately
+// starts with `.`, so this is a pure loss to reject.
+const STARTS_WITH_DOT = /^\./
+
 // No leading `-`: unicode-shield's own CLI parses a leading-dash argument
 // as a flag (src/cli/args.ts), not a path, so `path: '--json'` would
 // reach `unicode-shield scan --json --json` and fail as a usage error
@@ -134,10 +143,22 @@ const SAFE_VERSION = /^[\w.~+-]+$/
 const SAFE_PATH = /^[\w./:-]+$/
 const STARTS_WITH_DASH = /^-/
 
+// A `..` segment lets `path` walk out of whatever directory a workflow
+// author intended to scan. An absolute or drive-letter path (`C:/repo/src`)
+// stays allowed, that's the caller's own explicit choice, but nothing
+// about a same-repo relative scan target legitimately needs to climb
+// upward out of it.
+const HAS_DOT_DOT_SEGMENT = /(^|\/)\.\.($|\/)/
+
 function assertSafeVersion(version) {
   if (!SAFE_VERSION.test(version)) {
     throw new Error(
       `version must be a plain version, a ~ range, or a pre-release/build tag (letters, digits, . ~ + - only), got: ${JSON.stringify(version)}`,
+    )
+  }
+  if (STARTS_WITH_DOT.test(version)) {
+    throw new Error(
+      `version must not start with '.', npm resolves that as a local directory instead of a registry version, got: ${JSON.stringify(version)}`,
     )
   }
 }
@@ -148,6 +169,9 @@ function assertSafePath(path) {
   }
   if (STARTS_WITH_DASH.test(path)) {
     throw new Error(`path must not start with '-', it would be parsed as a flag rather than a path, got: ${JSON.stringify(path)}`)
+  }
+  if (HAS_DOT_DOT_SEGMENT.test(path)) {
+    throw new Error(`path must not contain a '..' segment, got: ${JSON.stringify(path)}`)
   }
 }
 

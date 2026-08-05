@@ -15,13 +15,17 @@ this project adheres to [Semantic Versioning](https://semver.org/).
   and exposes `safe`/`threat-count` outputs. `path` and `version` are both
   validated against a narrow, allowlisted character set before running
   anything, deliberately narrower than either could technically support
-  (no spaces in `path`, no leading `-` in `path`, no `^`/boolean/comparison
-  version ranges), since both get passed through a shell to work around a
-  Windows-specific quirk in how `npx` itself has to be invoked there, and
-  that's what keeps it safe. `^` specifically is excluded because cmd.exe
-  silently consumes it as its own escape character before `npx` ever sees
-  it, confirmed directly, not just disallowed out of caution.
-  See the README's GitHub Action section for full usage.
+  (no spaces in `path`, no leading `-` or `..` segment in `path`, no
+  `^`/boolean/comparison version ranges, no leading `.` in `version`),
+  since both get passed through a shell to work around a Windows-specific
+  quirk in how `npx` itself has to be invoked there, and that's what keeps
+  it safe. `^` is excluded because cmd.exe silently consumes it as its own
+  escape character before `npx` ever sees it, confirmed directly. A
+  leading `.` in `version` is excluded because npm resolves that as a
+  local directory instead of a registry lookup, independent of the package
+  name before the `@`, which was confirmed exploitable end to end (an
+  attacker-controlled local package ran in place of the real one) before
+  being fixed. See the README's GitHub Action section for full usage.
 
 ## [0.7.0] - 2026-07-19
 
