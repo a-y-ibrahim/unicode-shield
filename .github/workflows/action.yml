@@ -26,10 +26,22 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Scan this repo's own source (expected clean)
+      # A dedicated fixture, not this repo's own `src`: src/__tests__
+      # deliberately contains real bidi/invisible characters as literal
+      # test fixture data (that's the only way to test that scan()
+      # actually detects them), so scanning src itself was never going to
+      # be clean and would break again the moment any such fixture
+      # changes. threat-scan/threat-scan-non-failing below already use
+      # this same pattern (a purpose-built file) rather than the real
+      # source tree, for the same reason.
+      - name: Create a clean fixture file (no dangerous Unicode)
+        shell: bash
+        run: echo "const greeting = 'hello world'" > clean.js
+
+      - name: Scan the clean fixture file (expected clean)
         uses: ./
         with:
-          path: src
+          path: clean.js
 
   threat-scan:
     strategy:

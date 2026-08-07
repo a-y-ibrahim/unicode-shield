@@ -4,15 +4,22 @@ import {join} from 'node:path'
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest'
 
-// execFileSync is mocked so these tests never actually shell out to npx;
+// spawnSync is mocked so these tests never actually shell out to npx;
 // appendFileSync is left real (routed at a real temp file below) so the
 // GITHUB_OUTPUT-writing path is exercised end to end, not just asserted
 // against a spy. Same vi.hoisted() indirection this project's CLI tests
 // already use for node:fs, native ESM module namespaces can't be
 // redefined with vi.spyOn directly.
-const execFileSyncTrigger = vi.hoisted(() => ({
+//
+// Each test's impl returns a plain {status, stdout, stderr, error?}
+// object, the same shape the real spawnSync returns unconditionally
+// (unlike execFileSync, which this file used previously: it only returns
+// stdout on success and only exposes stderr via a thrown Error's property
+// on a non-zero exit, discarding it entirely otherwise, see the comment
+// on runScan in annotate.mjs for why that distinction mattered for real).
+const spawnSyncTrigger = vi.hoisted(() => ({
   impl: () => {
-    throw new Error('execFileSyncTrigger.impl not set for this test')
+    throw new Error('spawnSyncTrigger.impl not set for this test')
   },
 }))
 
@@ -20,7 +27,7 @@ vi.mock('node:child_process', async importOriginal => {
   const actual = await importOriginal()
   return {
     ...actual,
-    execFileSync: (command, args, options) => execFileSyncTrigger.impl(command, args, options),
+    spawnSync: (command, args, options) => spawnSyncTrigger.impl(command, args, options),
   }
 })
 
@@ -46,6 +53,16 @@ function threat(overrides = {}) {
     column: 6,
     ...overrides,
   }
+}
+
+/** A successful spawnSync result carrying `stdout` on exit code `status` (0 clean, 1 threats found, both real report content). */
+function spawnResult(status, stdout, stderr = '') {
+  return {status, stdout, stderr, error: undefined, signal: null}
+}
+
+/** A spawnSync result for the process never starting at all (npx missing, a permissions error, ...): no stdout/stderr, `error` set. */
+function spawnFailure(message) {
+  return {status: null, stdout: null, stderr: null, signal: null, error: new Error(message)}
 }
 
 describe('threatAnnotation', () => {
@@ -163,7 +180,7 @@ describe('main', () => {
   }
 
   it('reports safe=true and does not fail the step on a clean scan', () => {
-    execFileSyncTrigger.impl = () => JSON.stringify({safe: true, filesScanned: 2, files: [], unreadableDirectories: []})
+    spawnSyncTrigger.impl = () => spawnResult(0, JSON.stringify({safe: true, filesScanned: 2, files: [], unreadableDirectories: []}))
 
     main({GITHUB_OUTPUT: outputFile})
 
@@ -173,17 +190,16 @@ describe('main', () => {
   })
 
   it('prints annotations, reports safe=false, and fails the step when a threat is found', () => {
-    execFileSyncTrigger.impl = () => {
-      const error = new Error('Command failed')
-      error.status = 1
-      error.stdout = JSON.stringify({
-        safe: false,
-        filesScanned: 1,
-        files: [{path: 'a.ts', safe: false, threats: [threat()]}],
-        unreadableDirectories: [],
-      })
-      throw error
-    }
+    spawnSyncTrigger.impl = () =>
+      spawnResult(
+        1,
+        JSON.stringify({
+          safe: false,
+          filesScanned: 1,
+          files: [{path: 'a.ts', safe: false, threats: [threat()]}],
+          unreadableDirectories: [],
+        }),
+      )
 
     main({GITHUB_OUTPUT: outputFile})
 
@@ -193,17 +209,16 @@ describe('main', () => {
   })
 
   it('does not fail the step when fail-on-threat is false, even with a threat found', () => {
-    execFileSyncTrigger.impl = () => {
-      const error = new Error('Command failed')
-      error.status = 1
-      error.stdout = JSON.stringify({
-        safe: false,
-        filesScanned: 1,
-        files: [{path: 'a.ts', safe: false, threats: [threat()]}],
-        unreadableDirectories: [],
-      })
-      throw error
-    }
+    spawnSyncTrigger.impl = () =>
+      spawnResult(
+        1,
+        JSON.stringify({
+          safe: false,
+          filesScanned: 1,
+          files: [{path: 'a.ts', safe: false, threats: [threat()]}],
+          unreadableDirectories: [],
+        }),
+      )
 
     main({GITHUB_OUTPUT: outputFile, INPUT_FAIL_ON_THREAT: 'false'})
 
@@ -211,47 +226,46 @@ describe('main', () => {
     expect(readOutputs()).toBe(`safe=false${NEWLINE}threat-count=1${NEWLINE}`)
   })
 
-  it('fails the step with a clear annotation when the CLI exits with a usage error (message on stderr, not stdout)', () => {
-    // src/cli/index.ts writes exit-code-2 output via console.error, so the
-    // real failure shape here is empty stdout plus a message on stderr,
-    // not stdout containing the plain-text error (that would be a
-    // different, separately-tested scenario, see the "unexpected content
-    // on stdout" case below). execFileSync's error carries an empty
-    // string for a stream that produced no output, not undefined.
-    execFileSyncTrigger.impl = () => {
-      const error = new Error('Command failed')
-      error.status = 2
-      error.stdout = ''
-      error.stderr = 'Error: ENOENT: no such file or directory'
-      throw error
-    }
+  it('fails the step with a rich annotation, including stderr, when the CLI exits with a usage error', () => {
+    // src/cli/index.ts writes exit-code-2 output via console.error (to
+    // stderr, not stdout), so the real failure shape here is empty stdout
+    // plus a message on stderr. spawnSync returns both unconditionally,
+    // regardless of exit code, unlike execFileSync (used here previously),
+    // which only ever exposed stderr on a *thrown* error and discarded it
+    // completely for a clean exit; the stderr content below is exactly
+    // the kind of detail that distinction was hiding, confirmed for real
+    // against an actual 0-exit-with-empty-stdout failure on CI.
+    spawnSyncTrigger.impl = () => spawnResult(2, '', 'Error: ENOENT: no such file or directory')
 
     main({GITHUB_OUTPUT: outputFile})
 
     expect(process.exitCode).toBe(1)
     expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('::error::'))
-    expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('unicode-shield failed to run'))
+    expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('did not produce the expected JSON output'))
+    expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('exit code 2'))
+    expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('Error: ENOENT: no such file or directory'))
   })
 
-  it('fails the step with a clear annotation when stdout has unexpected, non-JSON content', () => {
-    // A different scenario from the one above: the process exits 0 (or
-    // its stdout is otherwise non-empty) but what it printed isn't valid
-    // JSON, e.g. npx itself writing a status line to stdout instead of
-    // stderr in some environment. Exercises JSON.parse's own catch branch
-    // in main(), distinct from runScanJson's error-recovery branch.
-    execFileSyncTrigger.impl = () => `npm warn using --force${NEWLINE}not json`
+  it('fails the step with a rich annotation when stdout has unexpected, non-JSON content on a clean exit', () => {
+    // A different scenario from the one above: the process exits 0 with
+    // empty stderr, but what it printed to stdout isn't valid JSON. This
+    // is the exact shape a real, confirmed CI failure took (see the
+    // comment on runScan in annotate.mjs): a 0 exit, no stderr, and stdout
+    // that wasn't the expected report, previously indistinguishable from
+    // "worked fine" under execFileSync since it never threw for this case.
+    spawnSyncTrigger.impl = () => spawnResult(0, `npm warn using --force${NEWLINE}not json`)
 
     main({GITHUB_OUTPUT: outputFile})
 
     expect(process.exitCode).toBe(1)
     expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('::error::'))
-    expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('did not produce valid JSON'))
+    expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('did not produce the expected JSON output'))
+    expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('exit code 0'))
+    expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('stderr was empty'))
   })
 
   it('fails the step with a clear annotation when npx itself cannot run at all', () => {
-    execFileSyncTrigger.impl = () => {
-      throw new Error('spawnSync npx ENOENT')
-    }
+    spawnSyncTrigger.impl = () => spawnFailure('spawnSync npx ENOENT')
 
     main({GITHUB_OUTPUT: outputFile})
 
@@ -262,10 +276,10 @@ describe('main', () => {
   it('passes path and version through to the npx invocation, via a shell', () => {
     let capturedArgs
     let capturedOptions
-    execFileSyncTrigger.impl = (_command, args, options) => {
+    spawnSyncTrigger.impl = (_command, args, options) => {
       capturedArgs = args
       capturedOptions = options
-      return JSON.stringify({safe: true, filesScanned: 0, files: [], unreadableDirectories: []})
+      return spawnResult(0, JSON.stringify({safe: true, filesScanned: 0, files: [], unreadableDirectories: []}))
     }
 
     main({GITHUB_OUTPUT: outputFile, INPUT_PATH: 'src', INPUT_VERSION: '0.7.0'})
@@ -280,9 +294,9 @@ describe('main', () => {
 
   it('defaults to scanning "." at the latest version when no inputs are given', () => {
     let capturedArgs
-    execFileSyncTrigger.impl = (_command, args) => {
+    spawnSyncTrigger.impl = (_command, args) => {
       capturedArgs = args
-      return JSON.stringify({safe: true, filesScanned: 0, files: [], unreadableDirectories: []})
+      return spawnResult(0, JSON.stringify({safe: true, filesScanned: 0, files: [], unreadableDirectories: []}))
     }
 
     main({GITHUB_OUTPUT: outputFile})
@@ -291,7 +305,7 @@ describe('main', () => {
   })
 
   it('does not write outputs when GITHUB_OUTPUT is not set (e.g. running outside Actions)', () => {
-    execFileSyncTrigger.impl = () => JSON.stringify({safe: true, filesScanned: 0, files: [], unreadableDirectories: []})
+    spawnSyncTrigger.impl = () => spawnResult(0, JSON.stringify({safe: true, filesScanned: 0, files: [], unreadableDirectories: []}))
 
     expect(() => main({})).not.toThrow()
   })
@@ -304,7 +318,7 @@ describe('main', () => {
     ['a backtick', 'src`evil`'],
     ['a dollar sign', 'src$(evil)'],
   ])('rejects a path containing %s instead of ever reaching the shell', (_label, path) => {
-    execFileSyncTrigger.impl = () => {
+    spawnSyncTrigger.impl = () => {
       throw new Error('should not have been called')
     }
 
@@ -321,7 +335,7 @@ describe('main', () => {
     ['a build-metadata tag', '0.7.0+build.1'],
     ['the default', 'latest'],
   ])('accepts %s as a version', (_label, version) => {
-    execFileSyncTrigger.impl = () => JSON.stringify({safe: true, filesScanned: 0, files: [], unreadableDirectories: []})
+    spawnSyncTrigger.impl = () => spawnResult(0, JSON.stringify({safe: true, filesScanned: 0, files: [], unreadableDirectories: []}))
 
     main({GITHUB_OUTPUT: outputFile, INPUT_VERSION: version})
 
@@ -334,7 +348,7 @@ describe('main', () => {
     ['a Windows-style path with a drive letter', 'C:/repo/src'],
     ['the default', '.'],
   ])('accepts %s as a path', (_label, path) => {
-    execFileSyncTrigger.impl = () => JSON.stringify({safe: true, filesScanned: 0, files: [], unreadableDirectories: []})
+    spawnSyncTrigger.impl = () => spawnResult(0, JSON.stringify({safe: true, filesScanned: 0, files: [], unreadableDirectories: []}))
 
     main({GITHUB_OUTPUT: outputFile, INPUT_PATH: path})
 
@@ -342,7 +356,7 @@ describe('main', () => {
   })
 
   it('rejects a path starting with a dash instead of letting it be parsed as a CLI flag', () => {
-    execFileSyncTrigger.impl = () => {
+    spawnSyncTrigger.impl = () => {
       throw new Error('should not have been called')
     }
 
@@ -358,7 +372,7 @@ describe('main', () => {
     ['a .. segment in the middle', 'src/../../secrets'],
     ['bare ..', '..'],
   ])('rejects a path containing %s instead of letting it escape the intended directory', (_label, path) => {
-    execFileSyncTrigger.impl = () => {
+    spawnSyncTrigger.impl = () => {
       throw new Error('should not have been called')
     }
 
@@ -379,7 +393,7 @@ describe('main', () => {
     ],
     ['a backtick', 'latest`evil`'],
   ])('rejects a version containing %s instead of ever reaching the shell', (_label, version) => {
-    execFileSyncTrigger.impl = () => {
+    spawnSyncTrigger.impl = () => {
       throw new Error('should not have been called')
     }
 
@@ -396,7 +410,7 @@ describe('main', () => {
     ['a bare double dot', '..'],
     ['a dot-prefixed value', '.foo'],
   ])('rejects a version starting with %s instead of letting npm resolve it as a local directory', (_label, version) => {
-    execFileSyncTrigger.impl = () => {
+    spawnSyncTrigger.impl = () => {
       throw new Error('should not have been called')
     }
 
@@ -420,19 +434,22 @@ describe('main', () => {
       rmSync(runnerTemp, {recursive: true, force: true})
     })
 
-    // Distinguishes the two real invocations by their own argv, the same
-    // signal a real npx call would carry, rather than call order (order is
-    // an implementation detail main() shouldn't be pinned to).
+    // Distinguishes the two real invocations by their own argv (the JSON
+    // call ends in the literal --json flag; the SARIF call ends in
+    // --format sarif, see the comments on runScanJson/runScanSarif in
+    // annotate.mjs for why they aren't the same flag), the same signal a
+    // real npx call would carry, rather than call order (order is an
+    // implementation detail main() shouldn't be pinned to).
     function dualFormatImpl({jsonResult, sarifResult}) {
       return (_command, args) => {
-        if (args.includes('--json')) return jsonResult
-        if (args.includes('sarif')) return sarifResult
+        if (args.at(-1) === '--json') return jsonResult
+        if (args.at(-1) === 'sarif') return sarifResult
         throw new Error(`unexpected args in test double: ${JSON.stringify(args)}`)
       }
     }
 
     it('writes a real SARIF file and sets sarif-path when sarif is true', () => {
-      execFileSyncTrigger.impl = dualFormatImpl({jsonResult: CLEAN_JSON, sarifResult: FAKE_SARIF})
+      spawnSyncTrigger.impl = dualFormatImpl({jsonResult: spawnResult(0, CLEAN_JSON), sarifResult: spawnResult(0, FAKE_SARIF)})
 
       main({GITHUB_OUTPUT: outputFile, RUNNER_TEMP: runnerTemp, INPUT_SARIF: 'true'})
 
@@ -444,7 +461,7 @@ describe('main', () => {
     })
 
     it('defaults the SARIF file location under RUNNER_TEMP', () => {
-      execFileSyncTrigger.impl = dualFormatImpl({jsonResult: CLEAN_JSON, sarifResult: FAKE_SARIF})
+      spawnSyncTrigger.impl = dualFormatImpl({jsonResult: spawnResult(0, CLEAN_JSON), sarifResult: spawnResult(0, FAKE_SARIF)})
 
       main({GITHUB_OUTPUT: outputFile, RUNNER_TEMP: runnerTemp, INPUT_SARIF: 'true'})
 
@@ -455,9 +472,9 @@ describe('main', () => {
 
     it('does not attempt a second invocation at all when sarif is not requested (the default)', () => {
       let callCount = 0
-      execFileSyncTrigger.impl = (...args) => {
+      spawnSyncTrigger.impl = (...args) => {
         callCount++
-        return dualFormatImpl({jsonResult: CLEAN_JSON, sarifResult: FAKE_SARIF})(...args)
+        return dualFormatImpl({jsonResult: spawnResult(0, CLEAN_JSON), sarifResult: spawnResult(0, FAKE_SARIF)})(...args)
       }
 
       main({GITHUB_OUTPUT: outputFile, RUNNER_TEMP: runnerTemp})
@@ -468,10 +485,10 @@ describe('main', () => {
 
     it('passes the same path and version to the SARIF invocation as the JSON one', () => {
       let sarifArgs
-      execFileSyncTrigger.impl = (command, args) => {
-        if (args.includes('--json')) return CLEAN_JSON
+      spawnSyncTrigger.impl = (command, args) => {
+        if (args.at(-1) === '--json') return spawnResult(0, CLEAN_JSON)
         sarifArgs = args
-        return FAKE_SARIF
+        return spawnResult(0, FAKE_SARIF)
       }
 
       main({GITHUB_OUTPUT: outputFile, RUNNER_TEMP: runnerTemp, INPUT_SARIF: 'true', INPUT_PATH: 'src', INPUT_VERSION: '0.7.0'})
@@ -479,10 +496,10 @@ describe('main', () => {
       expect(sarifArgs).toEqual(['--yes', 'unicode-shield@0.7.0', 'scan', 'src', '--format', 'sarif'])
     })
 
-    it('warns but does not fail the step when SARIF generation fails, even though the main scan already succeeded', () => {
-      execFileSyncTrigger.impl = (_command, args) => {
-        if (args.includes('--json')) return CLEAN_JSON
-        throw new Error('npx ENOENT for the sarif invocation')
+    it('warns but does not fail the step when SARIF generation fails to even start, even though the main scan already succeeded', () => {
+      spawnSyncTrigger.impl = (_command, args) => {
+        if (args.at(-1) === '--json') return spawnResult(0, CLEAN_JSON)
+        return spawnFailure('npx ENOENT for the sarif invocation')
       }
 
       main({GITHUB_OUTPUT: outputFile, RUNNER_TEMP: runnerTemp, INPUT_SARIF: 'true'})
@@ -493,10 +510,27 @@ describe('main', () => {
       expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('could not produce a SARIF report'))
     })
 
+    it('warns but does not fail the step when SARIF generation runs but produces unexpected, non-JSON output', () => {
+      // A different failure mode from the one above: the sarif invocation
+      // itself starts and exits, but what it printed isn't valid JSON,
+      // the exact class of bug this whole rewrite exists to make
+      // diagnosable (see runScan's own comment in annotate.mjs).
+      spawnSyncTrigger.impl = (_command, args) => {
+        if (args.at(-1) === '--json') return spawnResult(0, CLEAN_JSON)
+        return spawnResult(0, '')
+      }
+
+      main({GITHUB_OUTPUT: outputFile, RUNNER_TEMP: runnerTemp, INPUT_SARIF: 'true'})
+
+      expect(process.exitCode).toBeUndefined()
+      expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('could not produce a SARIF report'))
+      expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('did not produce the expected SARIF output'))
+    })
+
     it('still fails before ever attempting the SARIF invocation when path is invalid, sarif: true or not', () => {
       let sarifCalled = false
-      execFileSyncTrigger.impl = (_command, args) => {
-        if (args.includes('sarif')) sarifCalled = true
+      spawnSyncTrigger.impl = (_command, args) => {
+        if (args.at(-1) === 'sarif') sarifCalled = true
         throw new Error('should not have been called')
       }
 

@@ -30,7 +30,11 @@ this project adheres to [Semantic Versioning](https://semver.org/).
   more than once against the same commit (a build matrix, or scanning
   more than one path), where uploads with no category would otherwise
   silently replace each other in the Security tab instead of being
-  tracked separately.
+  tracked separately. `sarif: true` needs `version` to resolve to a
+  release with `--format` support (this one or later); the existing
+  annotation flow itself keeps working against any historical version,
+  unaffected, since it still uses the long-standing `--json` flag rather
+  than requiring the new one.
 
 ### Fixed
 
@@ -51,6 +55,16 @@ this project adheres to [Semantic Versioning](https://semver.org/).
   confirmed directly against Node's URL parser. Now correctly emitted as
   `/C:/repo/src/app.ts`, the same convention `file:` URLs use for Windows
   paths.
+- When unicode-shield's own CLI exited without producing the report the
+  Action expected (any cause: a usage error, a version too old for a flag
+  it was just given, or anything else), the resulting annotation gave no
+  way to tell why, e.g. `did not produce valid JSON output. Raw output: `
+  with nothing after it. The Action now always reports the exit code plus
+  whatever stderr and stdout the process actually produced, confirmed
+  directly to matter: a self-test run against a real, published version
+  predating `--format` support silently fell back to human-readable
+  output instead of erroring on the unrecognized flag, and the annotation
+  now says so plainly instead of leaving a scan that quietly never ran.
 
 ## [0.8.1] - 2026-08-07
 

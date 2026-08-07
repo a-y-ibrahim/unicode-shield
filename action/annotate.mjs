@@ -4,7 +4,7 @@
 // dist/ is gitignored (only built at publish time), so a script referenced
 // by `uses: owner/repo@ref` in a consumer's workflow must already be
 // directly executable in the checked-out source, with no build step.
-import {execFileSync} from 'node:child_process'
+import {spawnSync} from 'node:child_process'
 import {appendFileSync, writeFileSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
@@ -106,10 +106,11 @@ export function buildReport(scanResult) {
 
 // Windows ships `npx` as an extensionless POSIX shebang script; only the
 // `npx.cmd` wrapper next to it is directly runnable there, and even that
-// still needs `shell: true` below, plain execFileSync can't invoke a .cmd
-// file at all (a longstanding Node/libuv limitation: a .cmd isn't a real
-// PE executable, only cmd.exe can interpret it). Both failure modes were
-// confirmed directly against a Windows runner, not assumed.
+// still needs `shell: true` below, plain spawnSync can't invoke a .cmd
+// file at all (a longstanding Node/libuv limitation, shared by every
+// child_process spawn variant: a .cmd isn't a real PE executable, only
+// cmd.exe can interpret it). Both failure modes were confirmed directly
+// against a Windows runner, not assumed.
 const NPX_COMMAND = process.platform === 'win32' ? 'npx.cmd' : 'npx'
 
 // `shell: true` is what makes NPX_COMMAND resolve and run on Windows at
@@ -198,54 +199,94 @@ function assertSafePath(path) {
 }
 
 /**
- * Runs `npx unicode-shield@version scan path --json`.
+ * Runs `npx unicode-shield@version scan path <...extraArgs>` and returns
+ * the full spawnSync result (status, stdout, stderr), not just stdout on
+ * success: execFileSync (used here previously) only exposes stderr at all
+ * when the process exits non-zero, and only exposes stdout via a thrown
+ * Error's `.stdout` property in that same case, discarding it entirely on
+ * a genuine, unrelated crash. That's exactly the wrong shape for
+ * diagnosing "the process exited 0 but printed something other than the
+ * expected report": under execFileSync that case is indistinguishable
+ * from "worked fine, just isn't JSON", with no stderr to explain why,
+ * since a 0 exit never populates `error.stderr`. spawnSync returns
+ * stdout/stderr unconditionally regardless of exit code, so the caller
+ * can build a real diagnostic instead of guessing. Confirmed this
+ * mattered directly: a self-test run on Linux/macOS runners exited 0 with
+ * empty stdout, and execFileSync's shape had no way to surface whatever
+ * npx itself had written to stderr that would have explained it.
  *
- * scan's own exit code 1 ("threats found") is an expected outcome that
- * still carries JSON on stdout, execFileSync throws for it regardless (any
- * non-zero exit does), so that JSON is recovered from the error object
- * rather than treated as a failure. Exit code 2 ("usage/runtime error")
- * writes a plain-text message instead, not JSON; buildReport()'s caller
- * handles that by catching the resulting JSON.parse failure, not by
- * inspecting the exit code here.
+ * spawnSync itself never throws for a non-zero exit (unlike execFileSync);
+ * it only sets `result.error` when the process couldn't be started at all
+ * (npx missing, a permissions error, ...), which is the one case this
+ * re-throws for, since there's no stdout/stderr to report in that case
+ * either. Interpreting `result.status` (0 clean, 1 threats found, both
+ * carrying a real report; anything else doesn't) is left to the caller.
  */
-function runScanJson(path, version) {
+function runScan(path, version, extraArgs) {
   assertSafePath(path)
   assertSafeVersion(version)
-  try {
-    return execFileSync(NPX_COMMAND, ['--yes', `unicode-shield@${version}`, 'scan', path, '--json'], {
-      encoding: 'utf8',
-      maxBuffer: 1024 * 1024 * 64,
-      shell: true,
-    })
-  } catch (error) {
-    if (typeof error.stdout === 'string' && error.stdout.length > 0) return error.stdout
-    throw error
-  }
+  const result = spawnSync(NPX_COMMAND, ['--yes', `unicode-shield@${version}`, 'scan', path, ...extraArgs], {
+    encoding: 'utf8',
+    maxBuffer: 1024 * 1024 * 64,
+    shell: true,
+  })
+  if (result.error) throw result.error
+  return result
+}
+
+// `--json`, not `--format json`, deliberately: `version` is a
+// user-configurable input specifically so a workflow CAN pin to an older
+// published unicode-shield release, and every version ever published
+// understands `--json`. `--format` is new (introduced alongside SARIF
+// support) and isn't in any released version as of this action's own
+// release; hard-requiring it here would silently break the core
+// annotation flow (the one thing every consumer of this action depends
+// on, sarif: true or not) for anyone on an older version or the default
+// `latest` before a version with --format support is actually published.
+// Confirmed directly: pointed this at the real, currently-published
+// `latest`, and a `--format json` call silently fell back to
+// human-readable output instead of erroring, since the old CLI simply
+// doesn't recognize the flag. --format is fine to require for
+// runScanSarif below, since SARIF is a brand new capability with no
+// backward-compatibility expectation to begin with.
+function runScanJson(path, version) {
+  return runScan(path, version, ['--json'])
 }
 
 /**
- * Runs `npx unicode-shield@version scan path --format sarif`, a second,
- * separate invocation from runScanJson's rather than one call producing
- * both: this always derives SARIF from the exact same, single canonical
- * formatter (src/cli/sarif.ts, via the published CLI), instead of this
- * plain-JS script maintaining its own parallel copy of the SARIF rule
- * table that would silently drift out of sync the next time a threat
- * category is added there. Only run at all when the `sarif` input is
- * truthy, so the common case (annotations only) pays no extra cost.
+ * A second, separate invocation from runScanJson's rather than one call
+ * producing both formats at once: this always derives SARIF from the
+ * exact same, single canonical formatter (src/cli/sarif.ts, via the
+ * published CLI), instead of this plain-JS script maintaining its own
+ * parallel copy of the SARIF rule table that would silently drift out of
+ * sync the next time a threat category is added there. Only called at all
+ * when the `sarif` input is truthy, so the common case (annotations only)
+ * pays no extra cost.
  */
 function runScanSarif(path, version) {
-  assertSafePath(path)
-  assertSafeVersion(version)
-  try {
-    return execFileSync(NPX_COMMAND, ['--yes', `unicode-shield@${version}`, 'scan', path, '--format', 'sarif'], {
-      encoding: 'utf8',
-      maxBuffer: 1024 * 1024 * 64,
-      shell: true,
-    })
-  } catch (error) {
-    if (typeof error.stdout === 'string' && error.stdout.length > 0) return error.stdout
-    throw error
-  }
+  return runScan(path, version, ['--format', 'sarif'])
+}
+
+/**
+ * A diagnostic message for when unicode-shield's own stdout wasn't the
+ * report it was supposed to be: the exit status (or the signal that
+ * killed it, if any), whatever stderr the process wrote (frequently the
+ * actual explanation, see runScan's own comment on why that's not
+ * discarded here), and stdout itself. All three, not just "here's the raw
+ * output", specifically because a 0-exit-with-empty-stdout failure (a real
+ * one, not hypothetical, see runScan) looks identical to a crash without
+ * this: this is what turns that into something actually diagnosable
+ * instead of a dead end.
+ */
+function unexpectedOutputMessage(label, result) {
+  const exitInfo = result.status !== null ? `exit code ${result.status}` : `killed by signal ${result.signal}`
+  const stderr = (result.stderr ?? '').trim()
+  const stdout = (result.stdout ?? '').trim()
+  return [
+    `unicode-shield did not produce the expected ${label} output (${exitInfo}).`,
+    stderr.length > 0 ? `stderr: ${stderr}` : 'stderr was empty.',
+    stdout.length > 0 ? `stdout: ${stdout}` : 'stdout was empty.',
+  ].join(' ')
 }
 
 // RUNNER_TEMP (set by every GitHub-hosted and self-hosted runner) rather
@@ -277,9 +318,9 @@ export function main(env = process.env) {
   const failOnThreat = (env.INPUT_FAIL_ON_THREAT ?? 'true') !== 'false'
   const wantSarif = env.INPUT_SARIF === 'true'
 
-  let stdout
+  let result
   try {
-    stdout = runScanJson(path, version)
+    result = runScanJson(path, version)
   } catch (error) {
     console.log(`::error::unicode-shield failed to run: ${escapeData(error.message ?? String(error))}`)
     process.exitCode = 1
@@ -288,9 +329,9 @@ export function main(env = process.env) {
 
   let scanResult
   try {
-    scanResult = JSON.parse(stdout)
+    scanResult = JSON.parse(result.stdout)
   } catch {
-    console.log(`::error::unicode-shield did not produce valid JSON output. Raw output: ${escapeData(stdout.trim())}`)
+    console.log(`::error::${escapeData(unexpectedOutputMessage('JSON', result))}`)
     process.exitCode = 1
     return
   }
@@ -307,9 +348,14 @@ export function main(env = process.env) {
   // this is a warning rather than something that fails the whole step.
   if (wantSarif) {
     try {
-      const sarif = runScanSarif(path, version)
+      const sarifResult = runScanSarif(path, version)
+      try {
+        JSON.parse(sarifResult.stdout) // validate before trusting it, not just forwarding it
+      } catch {
+        throw new Error(unexpectedOutputMessage('SARIF', sarifResult))
+      }
       const outputPath = sarifFilePath(env)
-      writeFileSync(outputPath, sarif)
+      writeFileSync(outputPath, sarifResult.stdout)
       writeOutput('sarif-path', outputPath, env)
     } catch (error) {
       console.log(`::warning::unicode-shield could not produce a SARIF report: ${escapeData(error.message ?? String(error))}`)
