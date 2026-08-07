@@ -75,5 +75,18 @@ if (isMain) {
     if (exitCode === 2) console.error(output)
     else console.log(output)
   }
-  process.exit(exitCode)
+  // Sets the exit code for Node to use once it exits naturally, rather
+  // than calling process.exit(exitCode) directly: on Linux and macOS,
+  // stdout is a non-blocking pipe when captured by another process (a
+  // shell redirect, or exactly the child_process capture a script or CI
+  // step invoking this CLI does), so a write from the console.log above
+  // can still be in flight when process.exit() would tear the process
+  // down, silently dropping some or all of that output; confirmed
+  // directly against a real GitHub Actions Linux/macOS runner, where a
+  // clean scan's own JSON output was lost entirely this way (exit code 0,
+  // completely empty stdout), a well-documented Node.js gotcha, not
+  // specific to this codebase. process.exitCode alone lets the event
+  // loop drain (including that pending write) before Node exits on its
+  // own once nothing else is scheduled.
+  process.exitCode = exitCode
 }

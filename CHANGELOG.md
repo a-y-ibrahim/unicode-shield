@@ -38,6 +38,23 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The CLI could silently print nothing at all on a clean exit, on Linux
+  and macOS specifically, whenever its output was piped rather than
+  written to a real terminal (a shell redirect, or any script or CI step
+  that captures it, exactly how the GitHub Action itself, and most real
+  usage, invokes it). `console.log()`'s write to a pipe is asynchronous;
+  calling `process.exit()` immediately afterward, as the CLI's own entry
+  point did, could tear the process down before that write finished, a
+  well-documented Node.js behavior, not specific to this codebase, but a
+  real, live bug in every version published before this one regardless.
+  Confirmed directly: a GitHub Actions Linux runner reproduced it
+  consistently, exit code 0 with completely empty stdout, for a plain
+  `unicode-shield scan file --json`, no unusual input involved. The exit
+  code is now set via `process.exitCode` and left for Node's own event
+  loop to drain before exiting on its own, rather than forced immediately;
+  Windows was never affected; the same pattern is already how every other
+  entry point in this codebase (the GitHub Action's own script included)
+  sets its exit code, this file was the one exception.
 - The GitHub Action's own `::error`/`::warning` annotation message read
   "a invisible character character" and "a Unicode tag character
   character" (the category's own label already ended in "character",

@@ -10,48 +10,6 @@ permissions:
   contents: read
 
 jobs:
-  # TEMPORARY, to be removed once this is understood: every job below that
-  # shells out via annotate.mjs fails on ubuntu-latest/macos-latest only
-  # (never windows-latest) with a real, confirmed exit code 0 and
-  # completely empty stdout AND stderr, confirmed by rerunning the exact
-  # same already-pushed commit's checks twice with identical results, not
-  # a fluke. This isolates whether that's npx itself misbehaving on these
-  # runners or something specific to annotate.mjs's own spawnSync usage,
-  # by running the same command directly with no Node.js wrapper at all.
-  debug-npx:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Environment info
-        shell: bash
-        run: |
-          echo "node: $(node --version)"
-          echo "npm: $(npm --version)"
-          echo "npx: $(npx --version)"
-          which npx
-          echo "PATH: $PATH"
-
-      - name: Create a clean fixture file
-        shell: bash
-        run: echo "const greeting = 'hello world'" > clean.js
-
-      - name: Run npx directly, no Node.js wrapper involved
-        shell: bash
-        run: |
-          set +e
-          npx --yes unicode-shield@latest scan clean.js --json > out.txt 2> err.txt
-          status=$?
-          echo "exit code: $status"
-          echo "--- stdout (byte count: $(wc -c < out.txt)) ---"
-          cat out.txt
-          echo "--- stderr (byte count: $(wc -c < err.txt)) ---"
-          cat err.txt
-
   # Uses the action.yml/action/annotate.mjs checked out at this exact commit
   # (uses: ./), not a fixed published version, so a regression in the
   # action's own code is what this actually catches. Matrixed across all
