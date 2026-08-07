@@ -335,7 +335,12 @@ Scans a file, every file in a directory recursively (skipping
 directories, plus a denylist of binary file extensions), or stdin when
 `path` is `-`, and reports every threat found via `scan()`. Exits `1` if
 any dangerous threat was found, `0` if clean. `--json` prints structured
-output instead of the human-readable default.
+output instead of the human-readable default; `--format sarif` prints a
+[SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html)
+report instead, for uploading to GitHub's Security > Code scanning tab (see
+the GitHub Action section below, which does this for you). `--json` stays
+a shorthand for `--format json`; giving both together only errors if they
+disagree.
 
 ### `unicode-shield sanitize <path>`
 
@@ -378,11 +383,14 @@ already looking, instead of buried in a log.
 | `path` | `.` | File or directory to scan. Letters, digits, `.`, `/`, `:`, and `-` only; see below. |
 | `version` | `latest` | `unicode-shield` version to run: a dist-tag (`latest`), a plain version (`0.7.0`), or a `~` range, not a `^`, boolean, or comparison range; see below. |
 | `fail-on-threat` | `true` | Set to `false` to annotate findings without failing the job. |
+| `sarif` | `false` | Set to `true` to also upload results to Security > Code scanning (a persistent, trackable alert, not just a PR annotation), via `github/codeql-action/upload-sarif`. Needs `permissions: security-events: write` on the calling job (and `actions: read` too, on a private repository). |
+| `category` | `''` | Passed to `upload-sarif`'s own `category` when `sarif` is `true`. Set this to something distinct whenever this action runs more than once for the same commit (a build matrix, or scanning more than one path), otherwise later uploads silently replace earlier ones instead of being tracked separately. |
 
 | Output | |
 | --- | --- |
 | `safe` | `'true'` if no dangerous threat was found, `'false'` otherwise. |
 | `threat-count` | Total number of threats found (dangerous and informational). |
+| `sarif-path` | Path to the generated SARIF file, only set when `sarif` is `true`. |
 
 `path` and `version` are both allowlisted to a narrow character set before
 this action ever runs a command with them, deliberately narrower than
@@ -407,6 +415,21 @@ nothing about a same-repo scan target legitimately needs to walk outside
 the directory a workflow author intended to scan; an absolute or
 drive-letter path (`C:/repo/src`) still works, since that's the caller's
 own explicit choice.
+
+```yaml
+- uses: a-y-ibrahim/unicode-shield@v0.8.1
+  with:
+    path: src
+    sarif: true
+permissions:
+  security-events: write
+```
+
+With `sarif: true`, findings also become Security tab alerts: persistent
+across runs, with their own dismiss-with-a-reason workflow, instead of
+disappearing once a PR closes the way an annotation does. The extra
+`permissions` block is the only thing `sarif: true` needs beyond the
+defaults; nothing else about the step changes.
 
 Pin to a specific released tag rather than a branch, the same practice
 recommended for any third-party action.

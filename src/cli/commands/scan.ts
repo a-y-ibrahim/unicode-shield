@@ -1,13 +1,46 @@
 import {scan} from '../../scan'
-import {flagAsBoolean, type ParsedArgs} from '../args'
+import {flagAsBoolean, flagAsString, type ParsedArgs} from '../args'
 import {resolveFiles, readTextFile} from '../file-walk'
 import {formatScanHuman, formatScanJson, type FileScanResult} from '../format'
 import {buildLineIndex, indexToLineColumn} from '../position'
+import {formatScanSarif} from '../sarif'
 import {STDIN_ARG, readStdin} from '../stdin'
+import {STDIN_PATH_LABEL} from '../stdin-label'
 import type {CommandResult} from '../types'
+import {getPackageVersion} from '../version'
 
-const USAGE = 'Usage: unicode-shield scan <path> [--json]  (path can be - for stdin)'
-const STDIN_PATH_LABEL = '(stdin)'
+const USAGE =
+  'Usage: unicode-shield scan <path> [--json] [--format human|json|sarif]  (path can be - for stdin)'
+const VALID_FORMATS = new Set(['human', 'json', 'sarif'])
+
+/**
+ * `--json` predates `--format` and stays as a shorthand for `--format
+ * json` rather than being removed, so an existing `scan path --json`
+ * invocation (action/annotate.mjs's own included) keeps working unchanged.
+ * Giving both at once is only ever a mistake, not a meaningful override
+ * either way, so it's rejected rather than silently picking one.
+ */
+function resolveFormat(args: ParsedArgs): {format: 'human' | 'json' | 'sarif'} | {error: string} {
+  const useJson = flagAsBoolean(args.flags, 'json')
+  const formatFlag = flagAsString(args.flags, 'format')
+
+  if (formatFlag === undefined) {
+    return {format: useJson ? 'json' : 'human'}
+  }
+  if (!VALID_FORMATS.has(formatFlag)) {
+    return {error: `Unknown format: ${JSON.stringify(formatFlag)}. Valid formats: human, json, sarif.`}
+  }
+  if (useJson && formatFlag !== 'json') {
+    return {error: `--json conflicts with --format ${formatFlag}. Use one or the other.`}
+  }
+  return {format: formatFlag as 'human' | 'json' | 'sarif'}
+}
+
+function render(format: 'human' | 'json' | 'sarif', results: FileScanResult[], unreadableDirectories: string[]): string {
+  if (format === 'sarif') return formatScanSarif(results, unreadableDirectories, getPackageVersion(import.meta.url))
+  if (format === 'json') return formatScanJson(results, unreadableDirectories)
+  return formatScanHuman(results, unreadableDirectories)
+}
 
 function scanText(path: string, text: string): FileScanResult {
   const scanResult = scan(text)
@@ -25,7 +58,11 @@ export function runScan(args: ParsedArgs): CommandResult {
     return {exitCode: 2, output: USAGE}
   }
 
-  const useJson = flagAsBoolean(args.flags, 'json')
+  const resolvedFormat = resolveFormat(args)
+  if ('error' in resolvedFormat) {
+    return {exitCode: 2, output: `Error: ${resolvedFormat.error}`}
+  }
+  const {format} = resolvedFormat
 
   if (inputPath === STDIN_ARG) {
     let text: string
@@ -37,7 +74,7 @@ export function runScan(args: ParsedArgs): CommandResult {
     const result = scanText(STDIN_PATH_LABEL, text)
     return {
       exitCode: result.safe ? 0 : 1,
-      output: useJson ? formatScanJson([result]) : formatScanHuman([result]),
+      output: render(format, [result], []),
     }
   }
 
@@ -62,6 +99,6 @@ export function runScan(args: ParsedArgs): CommandResult {
 
   return {
     exitCode: overallSafe ? 0 : 1,
-    output: useJson ? formatScanJson(results, unreadableDirectories) : formatScanHuman(results, unreadableDirectories),
+    output: render(format, results, unreadableDirectories),
   }
 }

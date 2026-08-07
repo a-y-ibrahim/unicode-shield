@@ -19,6 +19,25 @@ inputs:
     description: "Whether a dangerous threat fails this step. Set to 'false' to only annotate without failing the job."
     required: false
     default: 'true'
+  sarif:
+    description: >-
+      Set to 'true' to also upload results to the repository's Security >
+      Code scanning tab (a persistent, trackable alert, not just a PR
+      annotation), via github/codeql-action/upload-sarif. Requires the
+      calling job to grant `permissions: security-events: write` (and,
+      on a private repository, `actions: read` too).
+    required: false
+    default: 'false'
+  category:
+    description: >-
+      Passed straight through to upload-sarif's own 'category' input when
+      'sarif' is 'true'; unused otherwise. Set this to something distinct
+      per call whenever this action runs more than once for the same
+      commit (a build matrix, or scanning more than one path in one
+      workflow), otherwise later uploads silently replace earlier ones
+      in the Security tab instead of being tracked separately.
+    required: false
+    default: ''
 
 outputs:
   safe:
@@ -27,6 +46,9 @@ outputs:
   threat-count:
     description: 'Total number of threats found (dangerous and informational).'
     value: ${{ steps.scan.outputs['threat-count'] }}
+  sarif-path:
+    description: "Path to the generated SARIF file, only set when 'sarif' is 'true'."
+    value: ${{ steps.scan.outputs['sarif-path'] }}
 
 runs:
   using: 'composite'
@@ -45,3 +67,25 @@ runs:
         # which would at least be obviously wrong. Not worth the risk to
         # save four characters.
         INPUT_FAIL_ON_THREAT: ${{ inputs['fail-on-threat'] }}
+        INPUT_SARIF: ${{ inputs.sarif }}
+
+    # Deliberately its own step rather than folded into annotate.mjs: this
+    # is the one part of the whole action that needs security-events:
+    # write, so keeping it conditional and separate means a consumer who
+    # never sets `sarif: true` never needs to grant that permission at all.
+    #
+    # The extra `steps.scan.outputs['sarif-path'] != ''` check matters on
+    # its own: annotate.mjs only warns, rather than failing its own step,
+    # when SARIF generation itself fails (the annotations/outputs from the
+    # main scan already succeeded independently of it, see the comment
+    # there), which leaves `sarif-path` unset. Without this check, this
+    # step would still run with an empty sarif_file and upload-sarif's own
+    # required-input validation throws for that, turning "warn and move
+    # on" into a hard step failure, exactly the outcome the warning was
+    # there to avoid, confirmed against upload-sarif's own source.
+    - name: Upload SARIF to code scanning
+      if: ${{ inputs.sarif == 'true' && steps.scan.outputs['sarif-path'] != '' }}
+      uses: github/codeql-action/upload-sarif@v4
+      with:
+        sarif_file: ${{ steps.scan.outputs['sarif-path'] }}
+        category: ${{ inputs.category }}

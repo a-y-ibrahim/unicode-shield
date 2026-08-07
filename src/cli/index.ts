@@ -20,15 +20,17 @@ Commands:
 
 Options:
   --json                 Machine-readable JSON output (scan, compare)
-  --write                  Modify files in place (sanitize, not with -)
-  --replacement <str>        Substitute string instead of deleting (sanitize)
-  --categories <a,b,c>          Also strip these categories (sanitize)
-  --help, -h                      Show this help
-  --version, -v                     Show the installed version
+  --format <name>          human (default), json, or sarif (scan only)
+  --write                    Modify files in place (sanitize, not with -)
+  --replacement <str>          Substitute string instead of deleting (sanitize)
+  --categories <a,b,c>            Also strip these categories (sanitize)
+  --help, -h                        Show this help
+  --version, -v                       Show the installed version
 
 Examples:
   unicode-shield scan ./src
   unicode-shield scan file.txt --json
+  unicode-shield scan ./src --format sarif > results.sarif
   unicode-shield sanitize file.txt > clean.txt
   unicode-shield sanitize ./data --write
   unicode-shield compare "apple" "аpple"

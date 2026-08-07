@@ -5,7 +5,9 @@
 // by `uses: owner/repo@ref` in a consumer's workflow must already be
 // directly executable in the checked-out source, with no build step.
 import {execFileSync} from 'node:child_process'
-import {appendFileSync} from 'node:fs'
+import {appendFileSync, writeFileSync} from 'node:fs'
+import {tmpdir} from 'node:os'
+import {join} from 'node:path'
 import {pathToFileURL} from 'node:url'
 
 export const CATEGORY_LABELS = {
@@ -17,6 +19,25 @@ export const CATEGORY_LABELS = {
   tag: 'Unicode tag character',
   'variation-selector': 'variation selector',
   'combining-marks': 'stacked combining marks',
+}
+
+// The message body's own complete noun phrase per category, kept separate
+// from CATEGORY_LABELS (a short tag, used only in the `title=` property)
+// rather than derived from it by mechanically gluing on "a"/"an" and
+// "character": that mechanical approach silently duplicated the word
+// "character" for a category whose own label already ends in it
+// ('invisible character', 'Unicode tag character' above both become
+// "a ... character character"), and produced a singular/plural mismatch
+// for combining-marks ("a stacked combining marks character").
+const CATEGORY_MESSAGE_PHRASES = {
+  'bidi-embedding': 'a bidi embedding/override character',
+  'bidi-isolate': 'a bidi isolate character',
+  'bidi-mark': 'a bidi mark character',
+  joiner: 'a script joiner character',
+  invisible: 'an invisible character',
+  tag: 'a Unicode tag character',
+  'variation-selector': 'a variation selector character',
+  'combining-marks': 'an excessively stacked combining mark',
 }
 
 // GitHub workflow-command escaping, matching @actions/core's own toolkit
@@ -36,8 +57,9 @@ function escapeProperty(value) {
 export function threatAnnotation(threat, filePath) {
   const command = threat.severity === 'dangerous' ? 'error' : 'warning'
   const label = CATEGORY_LABELS[threat.category] ?? threat.category
+  const phrase = CATEGORY_MESSAGE_PHRASES[threat.category] ?? `a ${threat.category} character`
   const codePointHex = `U+${threat.codePoint.toString(16).toUpperCase()}`
-  const message = `${threat.name} (${codePointHex}), a ${label} character`
+  const message = `${threat.name} (${codePointHex}), ${phrase}`
   const properties = [
     `file=${escapeProperty(filePath)}`,
     `line=${threat.line}`,
@@ -201,6 +223,42 @@ function runScanJson(path, version) {
   }
 }
 
+/**
+ * Runs `npx unicode-shield@version scan path --format sarif`, a second,
+ * separate invocation from runScanJson's rather than one call producing
+ * both: this always derives SARIF from the exact same, single canonical
+ * formatter (src/cli/sarif.ts, via the published CLI), instead of this
+ * plain-JS script maintaining its own parallel copy of the SARIF rule
+ * table that would silently drift out of sync the next time a threat
+ * category is added there. Only run at all when the `sarif` input is
+ * truthy, so the common case (annotations only) pays no extra cost.
+ */
+function runScanSarif(path, version) {
+  assertSafePath(path)
+  assertSafeVersion(version)
+  try {
+    return execFileSync(NPX_COMMAND, ['--yes', `unicode-shield@${version}`, 'scan', path, '--format', 'sarif'], {
+      encoding: 'utf8',
+      maxBuffer: 1024 * 1024 * 64,
+      shell: true,
+    })
+  } catch (error) {
+    if (typeof error.stdout === 'string' && error.stdout.length > 0) return error.stdout
+    throw error
+  }
+}
+
+// RUNNER_TEMP (set by every GitHub-hosted and self-hosted runner) rather
+// than the checked-out working directory: this file is scratch output for
+// the next step (upload-sarif) to consume, not part of the repository, and
+// writing it into the checkout risks a later step that runs `git status`
+// or similar seeing an unexpected untracked file. Falls back to Node's own
+// tmpdir() so main() still works outside real GitHub Actions (tests, local
+// runs).
+function sarifFilePath(env) {
+  return join(env.RUNNER_TEMP || tmpdir(), 'unicode-shield.sarif.json')
+}
+
 function writeOutput(name, value, env) {
   const outputFile = env.GITHUB_OUTPUT
   if (!outputFile) return
@@ -217,6 +275,7 @@ export function main(env = process.env) {
   const path = env.INPUT_PATH || '.'
   const version = env.INPUT_VERSION || 'latest'
   const failOnThreat = (env.INPUT_FAIL_ON_THREAT ?? 'true') !== 'false'
+  const wantSarif = env.INPUT_SARIF === 'true'
 
   let stdout
   try {
@@ -241,6 +300,21 @@ export function main(env = process.env) {
 
   writeOutput('safe', String(safe), env)
   writeOutput('threat-count', String(threatCount), env)
+
+  // A SARIF-generation failure only loses the optional Code Scanning
+  // upload for this run; the annotations and outputs above already
+  // succeeded, the thing every consumer of this action depends on, so
+  // this is a warning rather than something that fails the whole step.
+  if (wantSarif) {
+    try {
+      const sarif = runScanSarif(path, version)
+      const outputPath = sarifFilePath(env)
+      writeFileSync(outputPath, sarif)
+      writeOutput('sarif-path', outputPath, env)
+    } catch (error) {
+      console.log(`::warning::unicode-shield could not produce a SARIF report: ${escapeData(error.message ?? String(error))}`)
+    }
+  }
 
   if (!safe && failOnThreat) {
     process.exitCode = 1

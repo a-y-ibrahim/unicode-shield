@@ -107,3 +107,64 @@ jobs:
             echo "Expected outputs.safe=false, got '${{ steps.scan.outputs.safe }}'"
             exit 1
           fi
+
+  sarif-scan:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    # Only this job needs security-events: write (for upload-sarif), see
+    # action.yml's own comment on why that permission stays scoped to the
+    # one step that actually needs it rather than requested by default. A
+    # fork-submitted pull_request run gets a read-only token regardless of
+    # what's requested here, a GitHub guarantee, not something this
+    # workflow file can accidentally weaken.
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Create a file with a real Unicode threat
+        shell: bash
+        run: |
+          node <<'EOF'
+          const fs = require('node:fs')
+          const rlo = String.fromCodePoint(0x202e)
+          fs.writeFileSync('threat.js', `const username = "admin${rlo}nimda"\n`)
+          EOF
+
+      - name: Scan with sarif enabled
+        id: scan
+        uses: ./
+        with:
+          path: threat.js
+          fail-on-threat: 'false'
+          sarif: 'true'
+          # Distinct per matrix leg: this job runs the action 3 times
+          # against the same commit (once per OS), and an upload-sarif
+          # call with no category tracks all of them as the same series,
+          # each one silently replacing the last in the Security tab
+          # instead of being tracked separately, confirmed against
+          # upload-sarif's own documented behavior for repeat calls.
+          category: unicode-shield-self-test-${{ matrix.os }}
+
+      - name: Verify a real, valid SARIF file was produced and uploadable
+        shell: bash
+        env:
+          SARIF_PATH: ${{ steps.scan.outputs['sarif-path'] }}
+        run: |
+          if [ -z "$SARIF_PATH" ]; then
+            echo "Expected outputs.sarif-path to be set"
+            exit 1
+          fi
+          node <<'EOF'
+          const fs = require('node:fs')
+          const log = JSON.parse(fs.readFileSync(process.env.SARIF_PATH, 'utf8'))
+          if (log.version !== '2.1.0') throw new Error(`expected SARIF version 2.1.0, got ${log.version}`)
+          const results = log.runs[0].results
+          if (results.length !== 1) throw new Error(`expected exactly 1 SARIF result, got ${results.length}`)
+          if (results[0].ruleId !== 'bidi-embedding') throw new Error(`expected ruleId bidi-embedding, got ${JSON.stringify(results[0].ruleId)}`)
+          console.log('SARIF file verified:', process.env.SARIF_PATH)
+          EOF

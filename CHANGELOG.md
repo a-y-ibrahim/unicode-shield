@@ -4,6 +4,54 @@ All notable changes to this project are documented in this file. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `unicode-shield scan --format sarif`, a [SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html)
+  report alongside the existing human-readable and `--json` output, one
+  rule per threat category (plus two coverage-gap rules for a file or
+  directory that couldn't be read) with GitHub Code Scanning's own
+  `security-severity` scoring convention. `--json` stays a shorthand for
+  `--format json`; the two only conflict, and error, if given together
+  with different values.
+- The GitHub Action's new `sarif` input (default `false`): set to `true`
+  to also upload results to the repository's Security > Code scanning tab
+  via `github/codeql-action/upload-sarif`, a persistent, dismissible alert
+  instead of a PR annotation that disappears once the PR closes. Needs
+  `permissions: security-events: write` on the calling job (and
+  `actions: read` too on a private repository); a SARIF generation
+  failure only warns rather than failing the step, since the existing
+  annotations/outputs already succeeded independently of it, and the
+  upload step itself is skipped rather than run against an empty file
+  when that happens. Exposes a new `sarif-path` output with the generated
+  file's path, and a new `category` input passed straight through to
+  upload-sarif's own `category`, for a workflow that calls this action
+  more than once against the same commit (a build matrix, or scanning
+  more than one path), where uploads with no category would otherwise
+  silently replace each other in the Security tab instead of being
+  tracked separately.
+
+### Fixed
+
+- The GitHub Action's own `::error`/`::warning` annotation message read
+  "a invisible character character" and "a Unicode tag character
+  character" (the category's own label already ended in "character",
+  and the message template appended another one unconditionally), and
+  "a stacked combining marks character" for `combining-marks` (singular
+  "a" against a plural noun). All three now read as a single,
+  grammatically correct phrase. Found while writing the SARIF formatter
+  above and noticing its equivalent message needed the same fix; present
+  since the Action's first release, never covered by a test that checked
+  either category's exact message text.
+- A `path` resolving to a Windows drive-letter absolute path (`C:/repo/src`,
+  already accepted and tested for the Action's `path` input) produced an
+  invalid SARIF `artifactLocation.uri`: `C:/repo/src/app.ts` parses with
+  `c:` read as the URI's own scheme, silently discarding the drive letter,
+  confirmed directly against Node's URL parser. Now correctly emitted as
+  `/C:/repo/src/app.ts`, the same convention `file:` URLs use for Windows
+  paths.
+
 ## [0.8.1] - 2026-08-07
 
 ### Added

@@ -66,6 +66,19 @@ describe('threatAnnotation', () => {
     expect(line).toContain('a future-category character')
   })
 
+  it.each([
+    ['invisible', 'an invisible character'],
+    ['tag', 'a Unicode tag character'],
+    ['combining-marks', 'an excessively stacked combining mark'],
+  ])(
+    'phrases the %s category as a single, grammatically correct noun phrase, not "character character" or a plural mismatch',
+    (category, expectedPhrase) => {
+      const line = threatAnnotation(threat({category}), 'src/app.ts')
+      expect(line).toContain(expectedPhrase)
+      expect(line).not.toContain('character character')
+    },
+  )
+
   it('escapes % : , and newlines in the file path property', () => {
     const line = threatAnnotation(threat(), `weird,path%with:chars${NEWLINE}here`)
     expect(line).toContain('file=weird%2Cpath%25with%3Achars%0Ahere,')
@@ -391,5 +404,106 @@ describe('main', () => {
 
     expect(process.exitCode).toBe(1)
     expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("version must not start with '.'"))
+  })
+
+  describe('sarif', () => {
+    const CLEAN_JSON = JSON.stringify({safe: true, filesScanned: 0, files: [], unreadableDirectories: []})
+    const FAKE_SARIF = JSON.stringify({version: '2.1.0', runs: [{tool: {driver: {name: 'unicode-shield'}}, results: []}]})
+
+    let runnerTemp
+
+    beforeEach(() => {
+      runnerTemp = mkdtempSync(join(tmpdir(), 'unicode-shield-action-sarif-test-'))
+    })
+
+    afterEach(() => {
+      rmSync(runnerTemp, {recursive: true, force: true})
+    })
+
+    // Distinguishes the two real invocations by their own argv, the same
+    // signal a real npx call would carry, rather than call order (order is
+    // an implementation detail main() shouldn't be pinned to).
+    function dualFormatImpl({jsonResult, sarifResult}) {
+      return (_command, args) => {
+        if (args.includes('--json')) return jsonResult
+        if (args.includes('sarif')) return sarifResult
+        throw new Error(`unexpected args in test double: ${JSON.stringify(args)}`)
+      }
+    }
+
+    it('writes a real SARIF file and sets sarif-path when sarif is true', () => {
+      execFileSyncTrigger.impl = dualFormatImpl({jsonResult: CLEAN_JSON, sarifResult: FAKE_SARIF})
+
+      main({GITHUB_OUTPUT: outputFile, RUNNER_TEMP: runnerTemp, INPUT_SARIF: 'true'})
+
+      const outputs = readOutputs()
+      const sarifPathLine = outputs.split(NEWLINE).find(line => line.startsWith('sarif-path='))
+      expect(sarifPathLine).toBeDefined()
+      const sarifPath = sarifPathLine.slice('sarif-path='.length)
+      expect(readFileSync(sarifPath, 'utf8')).toBe(FAKE_SARIF)
+    })
+
+    it('defaults the SARIF file location under RUNNER_TEMP', () => {
+      execFileSyncTrigger.impl = dualFormatImpl({jsonResult: CLEAN_JSON, sarifResult: FAKE_SARIF})
+
+      main({GITHUB_OUTPUT: outputFile, RUNNER_TEMP: runnerTemp, INPUT_SARIF: 'true'})
+
+      const outputs = readOutputs()
+      const sarifPath = outputs.split(NEWLINE).find(line => line.startsWith('sarif-path=')).slice('sarif-path='.length)
+      expect(sarifPath.startsWith(runnerTemp)).toBe(true)
+    })
+
+    it('does not attempt a second invocation at all when sarif is not requested (the default)', () => {
+      let callCount = 0
+      execFileSyncTrigger.impl = (...args) => {
+        callCount++
+        return dualFormatImpl({jsonResult: CLEAN_JSON, sarifResult: FAKE_SARIF})(...args)
+      }
+
+      main({GITHUB_OUTPUT: outputFile, RUNNER_TEMP: runnerTemp})
+
+      expect(callCount).toBe(1)
+      expect(readOutputs()).not.toContain('sarif-path=')
+    })
+
+    it('passes the same path and version to the SARIF invocation as the JSON one', () => {
+      let sarifArgs
+      execFileSyncTrigger.impl = (command, args) => {
+        if (args.includes('--json')) return CLEAN_JSON
+        sarifArgs = args
+        return FAKE_SARIF
+      }
+
+      main({GITHUB_OUTPUT: outputFile, RUNNER_TEMP: runnerTemp, INPUT_SARIF: 'true', INPUT_PATH: 'src', INPUT_VERSION: '0.7.0'})
+
+      expect(sarifArgs).toEqual(['--yes', 'unicode-shield@0.7.0', 'scan', 'src', '--format', 'sarif'])
+    })
+
+    it('warns but does not fail the step when SARIF generation fails, even though the main scan already succeeded', () => {
+      execFileSyncTrigger.impl = (_command, args) => {
+        if (args.includes('--json')) return CLEAN_JSON
+        throw new Error('npx ENOENT for the sarif invocation')
+      }
+
+      main({GITHUB_OUTPUT: outputFile, RUNNER_TEMP: runnerTemp, INPUT_SARIF: 'true'})
+
+      expect(process.exitCode).toBeUndefined()
+      expect(readOutputs()).toBe(`safe=true${NEWLINE}threat-count=0${NEWLINE}`)
+      expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('::warning::'))
+      expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('could not produce a SARIF report'))
+    })
+
+    it('still fails before ever attempting the SARIF invocation when path is invalid, sarif: true or not', () => {
+      let sarifCalled = false
+      execFileSyncTrigger.impl = (_command, args) => {
+        if (args.includes('sarif')) sarifCalled = true
+        throw new Error('should not have been called')
+      }
+
+      main({GITHUB_OUTPUT: outputFile, RUNNER_TEMP: runnerTemp, INPUT_SARIF: 'true', INPUT_PATH: 'src; rm -rf /'})
+
+      expect(process.exitCode).toBe(1)
+      expect(sarifCalled).toBe(false)
+    })
   })
 })

@@ -78,6 +78,49 @@ describe('runScan', () => {
     expect(parsed.safe).toBe(false)
   })
 
+  it('produces the same JSON with --format json as with --json', () => {
+    const filePath = join(root, 'bad.txt')
+    writeFileSync(filePath, `admin${RLO}nimda`, 'utf8')
+    const viaFlag = runScan(parseArgs([filePath, '--json']))
+    const viaFormat = runScan(parseArgs([filePath, '--format', 'json']))
+    expect(viaFormat.output).toBe(viaFlag.output)
+  })
+
+  it('produces valid SARIF with --format sarif, exit code unaffected by the output format', () => {
+    const filePath = join(root, 'bad.txt')
+    writeFileSync(filePath, `admin${RLO}nimda`, 'utf8')
+    const result = runScan(parseArgs([filePath, '--format', 'sarif']))
+    expect(result.exitCode).toBe(1)
+    const parsed = JSON.parse(result.output) as {version: string; runs: Array<{results: Array<{ruleId: string}>}>}
+    expect(parsed.version).toBe('2.1.0')
+    expect(parsed.runs[0]!.results[0]!.ruleId).toBe('bidi-embedding')
+  })
+
+  it('rejects an unrecognized --format value with a clear usage error', () => {
+    const filePath = join(root, 'clean.txt')
+    writeFileSync(filePath, 'hello', 'utf8')
+    const result = runScan(parseArgs([filePath, '--format', 'xml']))
+    expect(result.exitCode).toBe(2)
+    expect(result.output).toContain('Unknown format')
+    expect(result.output).toContain('human, json, sarif')
+  })
+
+  it('rejects --json combined with a conflicting --format instead of silently picking one', () => {
+    const filePath = join(root, 'clean.txt')
+    writeFileSync(filePath, 'hello', 'utf8')
+    const result = runScan(parseArgs([filePath, '--json', '--format', 'sarif']))
+    expect(result.exitCode).toBe(2)
+    expect(result.output).toContain('--json conflicts with --format sarif')
+  })
+
+  it('accepts --json together with --format json (redundant, not conflicting)', () => {
+    const filePath = join(root, 'clean.txt')
+    writeFileSync(filePath, 'hello', 'utf8')
+    const result = runScan(parseArgs([filePath, '--json', '--format', 'json']))
+    expect(result.exitCode).toBe(0)
+    expect(() => JSON.parse(result.output)).not.toThrow()
+  })
+
   it('exits 2 with a clear error for a nonexistent path', () => {
     const result = runScan(parseArgs([join(root, 'nope.txt')]))
     expect(result.exitCode).toBe(2)
@@ -127,5 +170,12 @@ describe('runScan', () => {
     const parsed = JSON.parse(result.output) as {safe: boolean; files: Array<{path: string}>}
     expect(parsed.safe).toBe(false)
     expect(parsed.files[0]!.path).toBe('(stdin)')
+  })
+
+  it('produces valid SARIF for stdin, with no location on the result (stdin is not a real file)', () => {
+    stdinContentTrigger.content = `admin${RLO}nimda`
+    const result = runScan(parseArgs(['-', '--format', 'sarif']))
+    const parsed = JSON.parse(result.output) as {runs: Array<{results: Array<{locations?: unknown}>}>}
+    expect(parsed.runs[0]!.results[0]!.locations).toBeUndefined()
   })
 })
