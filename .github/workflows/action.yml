@@ -10,6 +10,31 @@ permissions:
   contents: read
 
 jobs:
+  # TEMPORARY: the 0.9.0 fix (process.exitCode instead of process.exit in
+  # src/cli/index.ts) did not resolve the ubuntu/macos failures below even
+  # after 0.9.0 was confirmed live as `latest` on the registry (checked
+  # directly, and 0.9.0 pinned explicitly works correctly when run
+  # locally), so either something is still resolving an older version on
+  # these runners specifically, or the fix is real but insufficient on its
+  # own. This checks exactly what `npx unicode-shield@latest --version`
+  # reports from a real runner, to settle which before guessing further.
+  debug-version:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Check what latest actually resolves to here
+        shell: bash
+        run: |
+          echo "npm view (registry, direct):"
+          npm view unicode-shield version
+          echo "npx --yes unicode-shield@latest --version:"
+          npx --yes unicode-shield@latest --version
+          echo "npm cache location:"
+          npm config get cache
+
   # Uses the action.yml/action/annotate.mjs checked out at this exact commit
   # (uses: ./), not a fixed published version, so a regression in the
   # action's own code is what this actually catches. Matrixed across all
