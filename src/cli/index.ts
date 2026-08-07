@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import {realpathSync} from 'node:fs'
 import {pathToFileURL} from 'node:url'
 
 import {parseArgs} from './args'
@@ -68,7 +69,24 @@ export function run(argv: string[]): CommandResult {
   }
 }
 
-const isMain = process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href
+// realpathSync, not a plain pathToFileURL(process.argv[1]): npm installs a
+// package's `bin` entry (see package.json) as a symlink on Linux/macOS
+// (node_modules/.bin/unicode-shield -> ../unicode-shield/dist/cli.js), and
+// this is exactly the invocation shape `npx unicode-shield@version ...`
+// uses. Node's ESM loader resolves import.meta.url through that symlink to
+// the real file, but process.argv[1] stays the symlink path actually
+// invoked, so the two never matched there: isMain was always false, this
+// whole block never ran, and the process exited cleanly with code 0 and
+// completely empty stdout/stderr, silently. Windows was never affected
+// (npm ships a .cmd shim there instead of a symlink, so argv[1] is already
+// the real path), which is why this only ever showed up on Linux/macOS CI
+// runners and never in local Windows testing. realpathSync resolves the
+// symlink first, matching what import.meta.url's own resolution already
+// does; this is Node's own documented pattern for this exact check.
+// Confirmed directly: a prior fix in this same block (process.exitCode
+// instead of process.exit()) addressed a real but different bug and did
+// not, by itself, resolve this one, isMain was still false either way.
+const isMain = process.argv[1] !== undefined && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href
 if (isMain) {
   const {exitCode, output} = run(process.argv.slice(2))
   if (output.length > 0) {

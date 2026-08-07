@@ -5,7 +5,7 @@
 // by `uses: owner/repo@ref` in a consumer's workflow must already be
 // directly executable in the checked-out source, with no build step.
 import {spawnSync} from 'node:child_process'
-import {appendFileSync, writeFileSync} from 'node:fs'
+import {appendFileSync, realpathSync, writeFileSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {pathToFileURL} from 'node:url'
@@ -367,7 +367,15 @@ export function main(env = process.env) {
   }
 }
 
-const isMain = process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href
+// realpathSync here too, matching src/cli/index.ts's own isMain check and
+// the reasoning in its comment: this script is currently only ever invoked
+// with a direct, non-symlinked path (action.yml runs
+// `node "${{ github.action_path }}/action/annotate.mjs"` against the real
+// checkout), so the symlink mismatch that check exists for isn't active
+// here today, but the check itself is identical and just as fragile, so it
+// gets the same fix rather than staying a latent trap for however this
+// script might be invoked in the future.
+const isMain = process.argv[1] !== undefined && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href
 if (isMain) {
   main()
 }
