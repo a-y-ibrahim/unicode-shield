@@ -219,7 +219,7 @@ some-tool | npx unicode-shield sanitize - | another-tool
 أداة سطر الأوامر أعلاه متاحة أيضا كـGitHub Action جاهز، فيضيف أي مستودع فحص Unicode إلى CI بخطوة واحدة فقط. نتائج الفحص تظهر كتعليقات مضمنة على الـcommit أو طلب السحب، في نفس المكان الذي ينظر إليه المراجع أصلا، بدل أن تضيع داخل السجل.
 
 ```yaml
-- uses: a-y-ibrahim/unicode-shield@v0.9.0
+- uses: a-y-ibrahim/unicode-shield@v0.9.1
   with:
     path: src
 ```
@@ -243,7 +243,7 @@ some-tool | npx unicode-shield sanitize - | another-tool
 كذلك version لا يجوز أن يبدأ بنقطة: npm يفسر قيمة مثل unicode-shield@. على أنها إشارة لمجلد محلي بدل البحث في السجل، بغض النظر عن اسم الحزمة المكتوب قبل @. فأي workflow يأخذ قيمة version من مصدر غير ثابت قد ينخدع ويشغل حزمة محلية عشوائية بدل الحزمة الحقيقية، وهذا تأكد مباشرة بإعادة تنفيذه فعليا. وبنفس المنطق من الجهة الأخرى، path لا يجوز أن يحتوي على .. كجزء من المسار: لا شيء في هدف فحص داخل نفس المستودع يحتاج فعلا الخروج خارج المجلد الذي قصده كاتب الـworkflow. المسار المطلق أو مسار بحرف قرص مثل C:/repo/src يبقى مقبولا، فهذا اختيار صريح من المستخدم نفسه.
 
 ```yaml
-- uses: a-y-ibrahim/unicode-shield@v0.9.0
+- uses: a-y-ibrahim/unicode-shield@v0.9.1
   with:
     path: src
     sarif: true

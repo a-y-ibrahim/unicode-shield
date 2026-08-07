@@ -4,6 +4,30 @@ All notable changes to this project are documented in this file. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.9.1] - 2026-08-07
+
+### Fixed
+
+- The CLI still silently printed nothing at all on Linux and macOS in the
+  one way that matters most: via `npx unicode-shield@version scan ...`,
+  exactly how the GitHub Action (and most real usage) runs it. 0.9.0's
+  `process.exitCode` fix below was real but incomplete: npm installs a
+  package's `bin` entry as a symlink on Linux/macOS
+  (`node_modules/.bin/unicode-shield` pointing at the real `dist/cli.js`),
+  which is exactly the shape `npx` invokes. Node's ESM loader resolves
+  `import.meta.url` through that symlink to the real file, but
+  `process.argv[1]` stays the symlink path actually invoked, so the CLI's
+  own check for "am I being run directly" was always false there: the
+  entire entry point never ran, silently, exit code 0 either way. Windows
+  was never affected (npm ships a `.cmd` shim there instead of a symlink,
+  so `process.argv[1]` is already the real path), which is exactly why
+  this only ever showed up on Linux/macOS. Fixed by resolving
+  `process.argv[1]` through `realpathSync` before comparing, Node's own
+  documented pattern for this exact check. Confirmed directly: reproduced
+  the failure locally with a real symlink to a real build (not a mock),
+  the same way npm creates one, then confirmed the fix resolves it against
+  that same symlink.
+
 ## [0.9.0] - 2026-08-07
 
 ### Added
@@ -238,6 +262,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
   Unicode Tags block (U+E0000-U+E007F), and the Variation Selectors
   Supplement (U+E0100-U+E01EF).
 
+[0.9.1]: https://github.com/a-y-ibrahim/unicode-shield/releases/tag/v0.9.1
 [0.9.0]: https://github.com/a-y-ibrahim/unicode-shield/releases/tag/v0.9.0
 [0.8.1]: https://github.com/a-y-ibrahim/unicode-shield/releases/tag/v0.8.1
 [0.7.0]: https://github.com/a-y-ibrahim/unicode-shield/releases/tag/v0.7.0
