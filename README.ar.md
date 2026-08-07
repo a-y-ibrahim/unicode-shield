@@ -219,7 +219,7 @@ some-tool | npx unicode-shield sanitize - | another-tool
 أداة سطر الأوامر أعلاه متاحة أيضا كـGitHub Action جاهز، فيضيف أي مستودع فحص Unicode إلى CI بخطوة واحدة فقط. نتائج الفحص تظهر كتعليقات مضمنة على الـcommit أو طلب السحب، في نفس المكان الذي ينظر إليه المراجع أصلا، بدل أن تضيع داخل السجل.
 
 ```yaml
-- uses: a-y-ibrahim/unicode-shield@v0.8.0
+- uses: a-y-ibrahim/unicode-shield@v0.8.1
   with:
     path: src
 ```

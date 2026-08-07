@@ -368,7 +368,7 @@ annotations on the commit or pull request, right where a reviewer is
 already looking, instead of buried in a log.
 
 ```yaml
-- uses: a-y-ibrahim/unicode-shield@v0.8.0
+- uses: a-y-ibrahim/unicode-shield@v0.8.1
   with:
     path: src
 ```
