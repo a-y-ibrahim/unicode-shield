@@ -373,7 +373,7 @@ annotations on the commit or pull request, right where a reviewer is
 already looking, instead of buried in a log.
 
 ```yaml
-- uses: a-y-ibrahim/unicode-shield@v0.8.1
+- uses: a-y-ibrahim/unicode-shield@v0.9.0
   with:
     path: src
 ```
@@ -417,7 +417,7 @@ drive-letter path (`C:/repo/src`) still works, since that's the caller's
 own explicit choice.
 
 ```yaml
-- uses: a-y-ibrahim/unicode-shield@v0.8.1
+- uses: a-y-ibrahim/unicode-shield@v0.9.0
   with:
     path: src
     sarif: true
