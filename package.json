@@ -71,7 +71,8 @@
   "overrides": {
     "esbuild": ">=0.28.1",
     "brace-expansion": ">=1.1.17",
-    "postcss": ">=8.5.18"
+    "postcss": ">=8.5.18",
+    "js-yaml": ">=4.3.1"
   },
   "peerDependencies": {
     "eslint": ">=9"
