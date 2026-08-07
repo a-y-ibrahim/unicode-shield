@@ -11,7 +11,8 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - The CLI still silently printed nothing at all on Linux and macOS in the
   one way that matters most: via `npx unicode-shield@version scan ...`,
   exactly how the GitHub Action (and most real usage) runs it. 0.9.0's
-  `process.exitCode` fix below was real but incomplete: npm installs a
+  `process.exitCode` fix (see its own entry in this file) was real but
+  incomplete: npm installs a
   package's `bin` entry as a symlink on Linux/macOS
   (`node_modules/.bin/unicode-shield` pointing at the real `dist/cli.js`),
   which is exactly the shape `npx` invokes. Node's ESM loader resolves
